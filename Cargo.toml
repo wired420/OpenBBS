@@ -6,7 +6,7 @@ default-members = ["crates/openbbs", "crates/openbbs-core"]
 [workspace.package]
 # The patch number is bumped automatically by `cargo xtask build`.
 # This is the version of the most recent release build.
-version = "0.0.0"
+version = "0.0.1"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/wired420/OpenBBS"

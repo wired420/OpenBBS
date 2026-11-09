@@ -10,7 +10,9 @@ to set up as Synchronet's and screens that look better.
 
 ## Status
 
-Early development, working toward **v0.0.1 Beta**.
+**v0.0.1 Beta.** Message boards, private mail, file areas (SFTP), door
+games and the sysop console all work over SSH. See [docs/SETUP.md](docs/SETUP.md)
+to run a board in WSL or on a Linux VPS.
 
 ## Building
 
@@ -64,7 +66,8 @@ config and database without starting the server.
   address.
 - **Door games** are listed in `doors/doors.toml`; the file explains each
   setting. OpenBBS writes DOOR.SYS and DOOR32.SYS and connects the door's
-  standard input and output to the caller.
+  standard input and output to the caller. [docs/DOORS.md](docs/DOORS.md)
+  covers classic DOS doors under DOSEMU2.
 - **Locked out?** `openbbs passwd HANDLE` sets a new password and
   `openbbs set-level HANDLE 99` makes someone sysop.
 
