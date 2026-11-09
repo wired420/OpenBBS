@@ -1,0 +1,7 @@
+/target
+/data
+openbbs.toml
+*.db
+*.db-journal
+*.db-wal
+*.db-shm

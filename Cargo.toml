@@ -1,0 +1,25 @@
+[workspace]
+resolver = "2"
+members = ["crates/openbbs", "crates/openbbs-core", "xtask"]
+default-members = ["crates/openbbs", "crates/openbbs-core"]
+
+[workspace.package]
+# The patch number is bumped automatically by `cargo xtask build`.
+# This is the version of the most recent release build.
+version = "0.0.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/wired420/OpenBBS"
+rust-version = "1.85"
+
+[workspace.dependencies]
+anyhow = "1"
+clap = { version = "4.6", features = ["derive"] }
+rusqlite = { version = "0.41", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+toml = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[profile.release]
+lto = "thin"
