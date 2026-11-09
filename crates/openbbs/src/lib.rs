@@ -2,12 +2,14 @@
 
 pub mod boards;
 pub mod editor;
+pub mod filebase;
 pub mod keys;
 pub mod mailbox;
 pub mod menu;
 pub mod nodes;
 pub mod picker;
 pub mod session;
+pub mod sftp;
 pub mod ssh;
 pub mod store;
 pub mod term;

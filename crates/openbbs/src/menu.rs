@@ -51,6 +51,10 @@ pub enum Action {
     Mail,
     /// Write a new letter.
     SendMail,
+    /// File areas.
+    Files,
+    /// Sysop: sync file areas with the folders on disk.
+    RescanFiles,
     /// Placeholder for features that aren't built yet.
     ComingSoon(String),
 }
@@ -76,6 +80,8 @@ impl TryFrom<String> for Action {
             ("newscan", None) => Action::NewScan,
             ("mail", None) => Action::Mail,
             ("sendmail", None) => Action::SendMail,
+            ("files", None) => Action::Files,
+            ("rescanfiles", None) => Action::RescanFiles,
             _ => return Err(format!("unknown menu action `{s}`")),
         };
         Ok(action)
@@ -95,6 +101,8 @@ impl fmt::Display for Action {
             Action::NewScan => f.write_str("newscan"),
             Action::Mail => f.write_str("mail"),
             Action::SendMail => f.write_str("sendmail"),
+            Action::Files => f.write_str("files"),
+            Action::RescanFiles => f.write_str("rescanfiles"),
             Action::Screen(n) => write!(f, "screen:{n}"),
             Action::ComingSoon(w) => write!(f, "comingsoon:{w}"),
         }

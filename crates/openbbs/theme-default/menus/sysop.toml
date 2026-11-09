@@ -14,6 +14,11 @@ label = "User List"
 action = "userlist"
 
 [[item]]
+key = "F"
+label = "Rescan File Areas"
+action = "rescanfiles"
+
+[[item]]
 key = "Q"
 label = "Back to Main Menu"
 action = "back"

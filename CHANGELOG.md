@@ -46,3 +46,18 @@ go.
 - Scrolling lightbar lists (arrows, Page Up/Down, Home/End) used for areas,
   messages and mail.
 - New menu actions: `messages`, `newscan`, `mail` and `sendmail`.
+- File areas over SFTP: log in with `sftp yourhandle@host` (handle and BBS
+  password) to browse areas as folders, download, and upload where your
+  access level allows. Uploads land in a temporary file and only appear once
+  complete; uploads over `files.max_upload_mb` are refused. Downloads are
+  counted.
+- File area screens: area and file lists with sizes, dates and download
+  counts, file details with ready-to-paste `sftp` commands, and describe or
+  delete for the uploader and sysop.
+- Files the sysop copies into an area folder are picked up at startup or with
+  Rescan File Areas on the sysop menu.
+- `ssh yourhandle@host` now checks your BBS password at the SSH level and
+  goes straight to the main menu. Other user names (like `new` or `bbs`)
+  still reach the login prompt as before.
+- New config settings: `ssh.public_host` (shown in transfer instructions) and
+  `files.max_upload_mb`.

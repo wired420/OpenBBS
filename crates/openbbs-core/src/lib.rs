@@ -3,6 +3,7 @@
 pub mod config;
 pub mod cp437;
 pub mod db;
+pub mod files;
 pub mod mail;
 pub mod messages;
 pub mod text;

@@ -100,6 +100,13 @@ fn check(path: &Path) -> Result<()> {
 fn run(path: &Path) -> Result<()> {
     let config = Config::load(path)?;
     let store = Store::open(&config.database_path())?;
+    {
+        let conn = openbbs_core::db::open(&config.database_path())?;
+        let report = openbbs_core::files::sync(&conn, &config.paths.files)?;
+        if report != Default::default() {
+            tracing::info!(?report, "file areas synced with disk");
+        }
+    }
     let key = ssh::load_or_create_host_key(&config.ssh.host_key)?;
     let runtime = tokio::runtime::Runtime::new()?;
     runtime.block_on(async move {

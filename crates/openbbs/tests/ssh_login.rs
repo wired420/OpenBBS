@@ -35,10 +35,19 @@ struct Caller {
 }
 
 impl Caller {
+    /// Connect as a guest (any user name that isn't a handle).
     async fn connect(addr: std::net::SocketAddr, user: &str) -> Self {
-        let config = Arc::new(client::Config::default());
-        let mut session = client::connect(config, addr, AcceptAnyHost).await.unwrap();
-        assert!(session.authenticate_none(user).await.unwrap().success());
+        Self::connect_with(addr, user, None).await
+    }
+
+    /// Connect with an SSH password (a real handle logs straight in).
+    async fn connect_with(addr: std::net::SocketAddr, user: &str, password: Option<&str>) -> Self {
+        let mut session = ssh_session(addr).await;
+        let authed = match password {
+            None => session.authenticate_none(user).await.unwrap(),
+            Some(pw) => session.authenticate_password(user, pw).await.unwrap(),
+        };
+        assert!(authed.success(), "ssh login failed for {user}");
         let channel = session.channel_open_session().await.unwrap();
         let (mut reader, writer) = channel.split();
         writer
@@ -108,9 +117,19 @@ impl Caller {
     }
 }
 
+async fn ssh_session(addr: std::net::SocketAddr) -> client::Handle<AcceptAnyHost> {
+    let config = Arc::new(client::Config::default());
+    client::connect(config, addr, AcceptAnyHost).await.unwrap()
+}
+
 async fn start_board() -> std::net::SocketAddr {
+    start_board_with_files(std::env::temp_dir().join("openbbs-test-unused-files")).await
+}
+
+async fn start_board_with_files(files: std::path::PathBuf) -> std::net::SocketAddr {
     let mut config = Config::default();
     config.bbs.name = "Test Board".into();
+    config.paths.files = files;
     // Use the built-in theme.
     config.paths.themes = std::env::temp_dir().join("openbbs-no-such-theme-dir");
     let store = Store::open_in_memory().unwrap();
@@ -154,8 +173,9 @@ async fn sign_up_log_in_and_use_menus() {
 
     // Lightbar: arrow down three times to File Areas, Enter.
     first.send("\x1b[B\x1b[B\x1b[B\r").await;
-    first.expect("File areas aren't open yet").await;
-    first.send(" ").await;
+    first.expect("File Areas").await;
+    first.expect("Uploads").await;
+    first.send("q").await;
     first.expect("Main »").await;
 
     // Post the first message in General.
@@ -275,18 +295,41 @@ async fn sign_up_log_in_and_use_menus() {
     first.send("qq").await;
     first.expect("Main »").await;
 
-    // Log in again as the sysop from a third connection: the SSH user name
-    // skips the handle prompt, and a wrong password is refused.
-    let third = Caller::connect(addr, "Clayton").await;
-    third.expect("Handle: Clayton").await;
+    // A guest connection can still log in with a handle at the BBS prompt.
+    let third = Caller::connect(addr, "bbs").await;
+    third.expect("NEW").await;
+    third.send("Clayton\r").await;
+    third.expect("Password").await;
     third.send("wrongpass\r").await;
     third.expect("Wrong handle or password").await;
-    third.expect("NEW").await;
     third.send("Clayton\r").await;
     third.expect("Password").await;
     third.send("hunter42\r").await;
     third.expect("call number 2").await;
     drop(third);
+
+    // SSH as the handle with the right password skips the BBS login.
+    let fourth = Caller::connect_with(addr, "Clayton", Some("hunter42")).await;
+    fourth.expect("Logged in as Clayton").await;
+    fourth.expect("call number 3").await;
+    drop(fourth);
+
+    // Real handles can't get in over SSH without the password.
+    let mut session = ssh_session(addr).await;
+    assert!(
+        !session
+            .authenticate_none("Clayton")
+            .await
+            .unwrap()
+            .success()
+    );
+    assert!(
+        !session
+            .authenticate_password("Clayton", "nope")
+            .await
+            .unwrap()
+            .success()
+    );
 
     first.send("g").await;
     first.expect("Log off now?").await;
@@ -310,4 +353,123 @@ async fn full_board_turns_callers_away() {
     let second = Caller::connect(addr, "b").await;
     second.expect("All nodes are busy").await;
     second.wait_closed().await;
+}
+
+/// Sign a user up through the BBS so they exist for SFTP.
+async fn sign_up(addr: std::net::SocketAddr, handle: &str, password: &str) {
+    let c = Caller::connect(addr, "new").await;
+    c.expect("NEW").await;
+    c.send("new\r").await;
+    c.expect("Choose a handle").await;
+    c.send(&format!("{handle}\r")).await;
+    c.expect("Choose a password").await;
+    c.send(&format!("{password}\r{password}\r\r\r\r")).await;
+    c.expect("Welcome aboard").await;
+}
+
+async fn open_sftp(
+    addr: std::net::SocketAddr,
+    user: &str,
+    password: Option<&str>,
+) -> Option<russh_sftp::client::SftpSession> {
+    let mut session = ssh_session(addr).await;
+    let ok = match password {
+        Some(pw) => session.authenticate_password(user, pw).await.unwrap(),
+        None => session.authenticate_none(user).await.unwrap(),
+    };
+    assert!(ok.success());
+    let channel = session.channel_open_session().await.unwrap();
+    channel.request_subsystem(true, "sftp").await.ok()?;
+    let sftp = tokio::time::timeout(
+        Duration::from_secs(5),
+        russh_sftp::client::SftpSession::new(channel.into_stream()),
+    )
+    .await
+    .ok()?
+    .ok()?;
+    // Keep the SSH connection alive as long as the SFTP session.
+    std::mem::forget(session);
+    Some(sftp)
+}
+
+#[tokio::test]
+async fn sftp_upload_list_download() {
+    let files = std::env::temp_dir().join(format!("openbbs-sftp-test-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&files);
+    let addr = start_board_with_files(files.clone()).await;
+    sign_up(addr, "Sysop Sam", "hunter42").await;
+    sign_up(addr, "Caller", "secret99").await;
+
+    // Guests get no SFTP.
+    assert!(open_sftp(addr, "guest", None).await.is_none());
+
+    let sftp = open_sftp(addr, "Caller", Some("secret99")).await.unwrap();
+    let root: Vec<String> = sftp
+        .read_dir("/")
+        .await
+        .unwrap()
+        .map(|e| e.file_name())
+        .collect();
+    assert!(
+        root.contains(&"uploads".to_string()),
+        "root lists areas: {root:?}"
+    );
+
+    sftp.write("/uploads/hello.txt", b"Hello from SFTP")
+        .await
+        .unwrap();
+    assert!(
+        sftp.write("/uploads/../uploads/.sneaky", b"x")
+            .await
+            .is_err()
+    );
+    assert!(sftp.write("/nope/file.txt", b"x").await.is_err());
+    let listing: Vec<String> = sftp
+        .read_dir("/uploads")
+        .await
+        .unwrap()
+        .map(|e| e.file_name())
+        .collect();
+    assert!(listing.contains(&"hello.txt".to_string()), "{listing:?}");
+    assert_eq!(
+        sftp.read("/uploads/hello.txt").await.unwrap(),
+        b"Hello from SFTP"
+    );
+    assert!(files.join("uploads/hello.txt").is_file());
+    // No temp files left behind.
+    let leftovers = std::fs::read_dir(files.join("uploads"))
+        .unwrap()
+        .filter(|e| {
+            e.as_ref()
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .starts_with('.')
+        })
+        .count();
+    assert_eq!(leftovers, 0);
+
+    // The BBS shows the upload with its uploader and a download.
+    let c = Caller::connect_with(addr, "Caller", Some("secret99")).await;
+    c.expect("Press any key").await;
+    c.send(" ").await;
+    c.expect("Main »").await;
+    c.send("f").await;
+    c.expect("File Areas").await;
+    c.send("\r").await;
+    c.expect("hello.txt").await;
+    c.send("\r").await;
+    let info = c.expect("Press any key").await;
+    assert!(info.contains("Uploader    Caller"), "{info}");
+    assert!(info.contains("Downloads   1"), "{info}");
+    assert!(info.contains("sftp -P"), "{info}");
+    drop(c);
+
+    // Another user can't overwrite or delete it; the sysop can.
+    let other = open_sftp(addr, "Sysop Sam", Some("hunter42"))
+        .await
+        .unwrap();
+    other.remove_file("/uploads/hello.txt").await.unwrap();
+    assert!(!files.join("uploads/hello.txt").exists());
+    let _ = std::fs::remove_dir_all(&files);
 }

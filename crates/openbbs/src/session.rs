@@ -45,6 +45,8 @@ pub struct Caller {
     pub peer: Option<SocketAddr>,
     /// The user name the SSH client logged in with.
     pub ssh_user: String,
+    /// Set when SSH already checked the caller's handle and password.
+    pub user: Option<User>,
 }
 
 const LOGIN_ATTEMPTS: usize = 3;
@@ -94,9 +96,18 @@ impl Session {
         self.show_screen(term, &theme, "welcome-info")?;
         term.println("")?;
 
-        let Some(user) = self.login(term, &caller.ssh_user).await? else {
-            term.println("|12Too many failed attempts. Goodbye.")?;
-            return Ok(());
+        let user = match &caller.user {
+            Some(user) => {
+                term.println(&format!("|07Logged in as |15{}|07.", user.handle))?;
+                user.clone()
+            }
+            None => match self.login(term).await? {
+                Some(user) => user,
+                None => {
+                    term.println("|12Too many failed attempts. Goodbye.")?;
+                    return Ok(());
+                }
+            },
         };
         let user = self
             .bbs
@@ -151,35 +162,14 @@ impl Session {
     }
 
     /// Ask for a handle (or NEW) and password. `None` after too many failures.
-    async fn login(&mut self, term: &mut Term, ssh_user: &str) -> Result<Option<User>> {
-        // If the SSH user name is a real handle, skip straight to the password.
-        let mut suggested = {
-            let name = ssh_user.to_string();
-            if users::validate_handle(&name).is_ok() {
-                let exists = self
-                    .bbs
-                    .store
-                    .call(move |c| users::handle_taken(c, &name))
-                    .await?;
-                exists.then(|| ssh_user.to_string())
-            } else {
-                None
-            }
-        };
+    async fn login(&mut self, term: &mut Term) -> Result<Option<User>> {
         for _ in 0..LOGIN_ATTEMPTS {
-            let handle = match suggested.take() {
-                Some(h) => {
-                    term.println(&format!("|07Handle: |15{h}"))?;
-                    h
-                }
-                None => {
-                    term.ask(
-                        "|07Enter your |15handle|07, or |11NEW|07 to sign up: ",
-                        LineOpts::text(users::HANDLE_MAX),
-                    )
-                    .await?
-                }
-            };
+            let handle = term
+                .ask(
+                    "|07Enter your |15handle|07, or |11NEW|07 to sign up: ",
+                    LineOpts::text(users::HANDLE_MAX),
+                )
+                .await?;
             if handle.is_empty() {
                 continue;
             }
@@ -382,6 +372,8 @@ impl Session {
                 Action::NewScan => self.new_scan(term).await?,
                 Action::Mail => self.mailbox(term).await?,
                 Action::SendMail => self.send_mail(term, None).await?,
+                Action::Files => self.file_areas(term).await?,
+                Action::RescanFiles => self.rescan_files(term).await?,
                 Action::ComingSoon(what) => {
                     let text = theme
                         .screen("comingsoon")?

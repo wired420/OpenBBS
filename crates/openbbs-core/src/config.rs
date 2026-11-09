@@ -11,7 +11,21 @@ use serde::{Deserialize, Serialize};
 pub struct Config {
     pub bbs: BbsConfig,
     pub ssh: SshConfig,
+    pub files: FilesConfig,
     pub paths: PathsConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default, deny_unknown_fields)]
+pub struct FilesConfig {
+    /// Largest upload accepted, in megabytes.
+    pub max_upload_mb: u64,
+}
+
+impl Default for FilesConfig {
+    fn default() -> Self {
+        Self { max_upload_mb: 100 }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -36,6 +50,9 @@ pub struct SshConfig {
     pub listen: String,
     /// Where the server's host key is stored (created on first run).
     pub host_key: PathBuf,
+    /// Host name callers use to reach the board, shown in SFTP instructions.
+    /// Leave empty to show a placeholder.
+    pub public_host: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -63,11 +80,31 @@ impl Default for BbsConfig {
     }
 }
 
+impl SshConfig {
+    /// The port callers connect to, from `listen`.
+    pub fn port(&self) -> u16 {
+        self.listen
+            .parse::<std::net::SocketAddr>()
+            .map(|a| a.port())
+            .unwrap_or(22)
+    }
+
+    /// Host name to show callers.
+    pub fn display_host(&self) -> &str {
+        if self.public_host.is_empty() {
+            "your-bbs-address"
+        } else {
+            &self.public_host
+        }
+    }
+}
+
 impl Default for SshConfig {
     fn default() -> Self {
         Self {
             listen: "0.0.0.0:2222".into(),
             host_key: PathBuf::from("data/ssh_host_ed25519_key"),
+            public_host: String::new(),
         }
     }
 }
