@@ -117,9 +117,80 @@ pub fn expand_tokens(input: &str, lookup: impl Fn(&str) -> Option<String>) -> St
     out
 }
 
+/// Make user-written text safe to print: color codes are kept, but screen
+/// control codes (`|CL`, `|CR`) are neutralized. Use [`escape_pipes`] where
+/// colors shouldn't be allowed either.
+pub fn user_colors(input: &str) -> String {
+    input.replace("|CL", "||CL").replace("|CR", "||CR")
+}
+
+/// Show every `|` literally.
+pub fn escape_pipes(input: &str) -> String {
+    input.replace('|', "||")
+}
+
+/// Word-wrap plain text to `width` columns. Existing line breaks are kept;
+/// words longer than a line are split.
+pub fn wrap(text: &str, width: usize) -> Vec<String> {
+    let width = width.max(10);
+    let mut lines = Vec::new();
+    for raw in text.split('\n') {
+        let raw = raw.trim_end_matches('\r');
+        if raw.is_empty() {
+            lines.push(String::new());
+            continue;
+        }
+        let mut line = String::new();
+        let mut len = 0;
+        for word in raw.split(' ') {
+            let mut word = word.to_string();
+            let mut wlen = word.chars().count();
+            while wlen > width {
+                if len > 0 {
+                    lines.push(std::mem::take(&mut line));
+                    len = 0;
+                }
+                let head: String = word.chars().take(width).collect();
+                word = word.chars().skip(width).collect();
+                wlen = word.chars().count();
+                lines.push(head);
+            }
+            let needed = if len == 0 { wlen } else { len + 1 + wlen };
+            if needed > width && len > 0 {
+                lines.push(std::mem::take(&mut line));
+                len = 0;
+            }
+            if len > 0 {
+                line.push(' ');
+                len += 1;
+            }
+            line.push_str(&word);
+            len += wlen;
+        }
+        lines.push(line);
+    }
+    lines
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn wraps_words() {
+        assert_eq!(
+            wrap("the quick brown fox", 10),
+            vec!["the quick", "brown fox"]
+        );
+        assert_eq!(wrap("a\n\nb", 10), vec!["a", "", "b"]);
+        assert_eq!(wrap("abcdefghijklmno", 10), vec!["abcdefghij", "klmno"]);
+    }
+
+    #[test]
+    fn neutralizes_screen_codes() {
+        assert_eq!(pipe_to_ansi(&user_colors("|CLhi")), "|CLhi");
+        assert_eq!(pipe_to_ansi(&escape_pipes("|15x")), "|15x");
+    }
 
     #[test]
     fn colors() {

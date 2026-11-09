@@ -43,6 +43,14 @@ pub enum Action {
     UserInfo,
     /// Show a screen file, then pause.
     Screen(String),
+    /// Message area list.
+    Messages,
+    /// Read every new message.
+    NewScan,
+    /// The caller's mailbox.
+    Mail,
+    /// Write a new letter.
+    SendMail,
     /// Placeholder for features that aren't built yet.
     ComingSoon(String),
 }
@@ -64,6 +72,10 @@ impl TryFrom<String> for Action {
             ("who", None) => Action::Who,
             ("userlist", None) => Action::UserList,
             ("userinfo", None) => Action::UserInfo,
+            ("messages", None) => Action::Messages,
+            ("newscan", None) => Action::NewScan,
+            ("mail", None) => Action::Mail,
+            ("sendmail", None) => Action::SendMail,
             _ => return Err(format!("unknown menu action `{s}`")),
         };
         Ok(action)
@@ -79,6 +91,10 @@ impl fmt::Display for Action {
             Action::Who => f.write_str("who"),
             Action::UserList => f.write_str("userlist"),
             Action::UserInfo => f.write_str("userinfo"),
+            Action::Messages => f.write_str("messages"),
+            Action::NewScan => f.write_str("newscan"),
+            Action::Mail => f.write_str("mail"),
+            Action::SendMail => f.write_str("sendmail"),
             Action::Screen(n) => write!(f, "screen:{n}"),
             Action::ComingSoon(w) => write!(f, "comingsoon:{w}"),
         }

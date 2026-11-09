@@ -33,3 +33,16 @@ go.
 - CP437 to UTF-8 conversion so classic `.ans` art displays correctly, pipe
   color codes (`|00`-`|23`) and `@TOKENS@` such as `@USER@` and `@BBSNAME@`.
 - Idle callers are disconnected after `bbs.idle_minutes`.
+- Message boards: area list with total and new counts, message lists,
+  a reader with next/previous/reply, posting with To and Subject, quoted
+  replies, per-user read pointers, a new message scan across every area,
+  and "catch up". Areas can limit who reads and who posts by access level.
+  Sysops and authors can delete messages.
+- Private mail: inbox with unread markers, reading, sending, replying with
+  quotes, and deleting. Callers are told about new mail and new posts at
+  login and can jump straight to their mail.
+- A line editor for messages and mail with automatic word wrap and `/S`
+  save, `/A` abort, `/L` list and `/D` delete-line commands.
+- Scrolling lightbar lists (arrows, Page Up/Down, Home/End) used for areas,
+  messages and mail.
+- New menu actions: `messages`, `newscan`, `mail` and `sendmail`.

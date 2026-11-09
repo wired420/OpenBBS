@@ -81,10 +81,10 @@ pub async fn run(bbs: Arc<Bbs>, mut term: Term, caller: Caller) {
     );
 }
 
-struct Session {
-    bbs: Arc<Bbs>,
-    node: NodeGuard,
-    user: Option<User>,
+pub(crate) struct Session {
+    pub(crate) bbs: Arc<Bbs>,
+    pub(crate) node: NodeGuard,
+    pub(crate) user: Option<User>,
 }
 
 impl Session {
@@ -115,7 +115,31 @@ impl Session {
             term.println(&format!("|07Last time you called: |15{last} UTC"))?;
         }
         self.user = Some(user);
-        term.pause().await?;
+        let (me, _) = self.me();
+        let level = self.level();
+        let (new_mail, new_posts) = self
+            .bbs
+            .store
+            .call(move |c| {
+                Ok((
+                    openbbs_core::mail::unread_count(c, me)?,
+                    openbbs_core::messages::total_new(c, me, level)?,
+                ))
+            })
+            .await?;
+        if new_posts > 0 {
+            term.println(&format!(
+                "|07There are |14{new_posts}|07 new messages on the boards."
+            ))?;
+        }
+        if new_mail > 0 {
+            term.println(&format!("|14You have {new_mail} new private mail."))?;
+            if term.yes_no("|07Read your mail now?", true).await? {
+                self.mailbox(term).await?;
+            }
+        } else {
+            term.pause().await?;
+        }
 
         self.menu_loop(term).await?;
 
@@ -354,6 +378,10 @@ impl Session {
                     self.show_screen(term, &theme, &name)?;
                     term.pause().await?;
                 }
+                Action::Messages => self.message_areas(term).await?,
+                Action::NewScan => self.new_scan(term).await?,
+                Action::Mail => self.mailbox(term).await?,
+                Action::SendMail => self.send_mail(term, None).await?,
                 Action::ComingSoon(what) => {
                     let text = theme
                         .screen("comingsoon")?
@@ -470,11 +498,19 @@ impl Session {
         Ok(())
     }
 
-    fn level(&self) -> i64 {
+    /// The logged-in user. Only called after login.
+    pub(crate) fn me(&self) -> (i64, String) {
+        self.user
+            .as_ref()
+            .map(|u| (u.id, u.handle.clone()))
+            .unwrap_or((0, "Guest".into()))
+    }
+
+    pub(crate) fn level(&self) -> i64 {
         self.user.as_ref().map(|u| u.access_level).unwrap_or(0)
     }
 
-    fn show_screen(&self, term: &Term, theme: &Theme, name: &str) -> Result<()> {
+    pub(crate) fn show_screen(&self, term: &Term, theme: &Theme, name: &str) -> Result<()> {
         if let Some(text) = theme.screen(name)? {
             term.print(&self.expand(&text))?;
         }
@@ -489,7 +525,7 @@ impl Session {
     }
 
     /// Fill in `@TOKENS@` such as @USER@ and @BBSNAME@.
-    fn expand(&self, text: &str) -> String {
+    pub(crate) fn expand(&self, text: &str) -> String {
         let cfg = &self.bbs.config;
         expand_tokens(text, |token| {
             Some(match token {
