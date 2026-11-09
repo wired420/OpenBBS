@@ -23,6 +23,10 @@ pub struct BbsConfig {
     pub sysop: String,
     /// Most callers allowed online at once.
     pub max_nodes: u16,
+    /// Theme folder name under `paths.themes`.
+    pub theme: String,
+    /// Minutes a caller can sit idle before being disconnected.
+    pub idle_minutes: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -53,6 +57,8 @@ impl Default for BbsConfig {
             name: "My OpenBBS".into(),
             sysop: "Sysop".into(),
             max_nodes: 8,
+            theme: "default".into(),
+            idle_minutes: 15,
         }
     }
 }
@@ -99,6 +105,12 @@ impl Config {
         if self.bbs.name.trim().is_empty() {
             bail!("bbs.name must not be empty");
         }
+        if self.bbs.idle_minutes == 0 {
+            bail!("bbs.idle_minutes must be at least 1");
+        }
+        if self.bbs.theme.is_empty() || self.bbs.theme.contains(['/', '\\', '.']) {
+            bail!("bbs.theme must be a plain folder name");
+        }
         if self.bbs.max_nodes == 0 {
             bail!("bbs.max_nodes must be at least 1");
         }
@@ -107,6 +119,11 @@ impl Config {
             .parse::<std::net::SocketAddr>()
             .with_context(|| format!("ssh.listen is not a valid address: {}", self.ssh.listen))?;
         Ok(())
+    }
+
+    /// Folder of the active theme.
+    pub fn theme_dir(&self) -> PathBuf {
+        self.paths.themes.join(&self.bbs.theme)
     }
 
     /// Path of the SQLite database inside the data folder.

@@ -2,8 +2,11 @@
 
 use std::path::{Path, PathBuf};
 
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
+use openbbs::session::Bbs;
+use openbbs::store::Store;
+use openbbs::{ssh, theme};
 use openbbs_core::{VERSION, config::Config, db};
 
 #[derive(Parser)]
@@ -27,6 +30,8 @@ enum Command {
     },
     /// Validate the config file and database, then exit.
     Check,
+    /// Start the BBS and listen for SSH callers.
+    Run,
 }
 
 fn main() -> Result<()> {
@@ -40,6 +45,7 @@ fn main() -> Result<()> {
     match cli.command {
         Command::Init { force } => init(&cli.config, force),
         Command::Check => check(&cli.config),
+        Command::Run => run(&cli.config),
     }
 }
 
@@ -61,11 +67,18 @@ fn init(path: &Path, force: bool) -> Result<()> {
         std::fs::create_dir_all(dir)?;
     }
     db::open(&config.database_path())?;
+    let theme_files = theme::install_default(&config.theme_dir())?;
+    ssh::load_or_create_host_key(&config.ssh.host_key)?;
     println!(
         "OpenBBS {VERSION}: wrote {} and created the database.",
         path.display()
     );
-    println!("Edit the config, then run `openbbs check`.");
+    println!(
+        "Installed the default theme in {} ({theme_files} files).",
+        config.theme_dir().display()
+    );
+    println!("Edit the config, then start the board with `openbbs run`.");
+    println!("The first person to sign up becomes the sysop.");
     Ok(())
 }
 
@@ -82,4 +95,29 @@ fn check(path: &Path) -> Result<()> {
     );
     println!("Config and database look good.");
     Ok(())
+}
+
+fn run(path: &Path) -> Result<()> {
+    let config = Config::load(path)?;
+    let store = Store::open(&config.database_path())?;
+    let key = ssh::load_or_create_host_key(&config.ssh.host_key)?;
+    let runtime = tokio::runtime::Runtime::new()?;
+    runtime.block_on(async move {
+        let listener = tokio::net::TcpListener::bind(&config.ssh.listen)
+            .await
+            .with_context(|| format!("listening on {}", config.ssh.listen))?;
+        tracing::info!(
+            "OpenBBS {VERSION} \"{}\" listening for SSH callers on {}",
+            config.bbs.name,
+            config.ssh.listen
+        );
+        let bbs = Bbs::new(config, store);
+        tokio::select! {
+            result = ssh::serve(bbs, key, listener) => result,
+            _ = tokio::signal::ctrl_c() => {
+                tracing::info!("shutting down");
+                Ok(())
+            }
+        }
+    })
 }
