@@ -253,6 +253,91 @@ pub fn total_new(conn: &Connection, user_id: i64, level: i64) -> Result<i64> {
         .sum())
 }
 
+/// A message area's settings, for the sysop.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AreaSettings {
+    pub conference_id: i64,
+    pub name: String,
+    pub description: String,
+    pub read_level: i64,
+    pub post_level: i64,
+}
+
+fn check_settings(settings: &AreaSettings) -> Result<()> {
+    if settings.name.trim().is_empty() || settings.name.chars().count() > 40 {
+        bail!("Area names must be 1 to 40 characters.");
+    }
+    for level in [settings.read_level, settings.post_level] {
+        if !(0..=99).contains(&level) {
+            bail!("Levels run from 0 to 99.");
+        }
+    }
+    Ok(())
+}
+
+/// Every area with its settings, regardless of level.
+pub fn all_area_settings(conn: &Connection) -> Result<Vec<(i64, AreaSettings, i64)>> {
+    let mut stmt = conn.prepare(
+        "SELECT a.id, a.conference_id, a.name, a.description, a.read_level, a.post_level,
+                (SELECT count(*) FROM messages m WHERE m.area_id = a.id)
+         FROM message_areas a JOIN message_conferences c ON c.id = a.conference_id
+         ORDER BY c.sort_order, c.name, a.sort_order, a.name",
+    )?;
+    let rows = stmt.query_map([], |r| {
+        Ok((
+            r.get(0)?,
+            AreaSettings {
+                conference_id: r.get(1)?,
+                name: r.get(2)?,
+                description: r.get(3)?,
+                read_level: r.get(4)?,
+                post_level: r.get(5)?,
+            },
+            r.get(6)?,
+        ))
+    })?;
+    Ok(rows.collect::<rusqlite::Result<_>>()?)
+}
+
+pub fn add_area(conn: &Connection, settings: &AreaSettings) -> Result<i64> {
+    check_settings(settings)?;
+    conn.execute(
+        "INSERT INTO message_areas (conference_id, name, description, read_level, post_level)
+         VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![
+            settings.conference_id,
+            settings.name.trim(),
+            settings.description.trim(),
+            settings.read_level,
+            settings.post_level
+        ],
+    )
+    .map_err(|e| anyhow::anyhow!("Couldn't add the area (is the name taken?): {e}"))?;
+    Ok(conn.last_insert_rowid())
+}
+
+pub fn update_area(conn: &Connection, id: i64, settings: &AreaSettings) -> Result<()> {
+    check_settings(settings)?;
+    conn.execute(
+        "UPDATE message_areas SET name = ?2, description = ?3, read_level = ?4, post_level = ?5
+         WHERE id = ?1",
+        params![
+            id,
+            settings.name.trim(),
+            settings.description.trim(),
+            settings.read_level,
+            settings.post_level
+        ],
+    )?;
+    Ok(())
+}
+
+/// Delete an area and every message in it.
+pub fn delete_area(conn: &Connection, id: i64) -> Result<()> {
+    conn.execute("DELETE FROM message_areas WHERE id = ?1", [id])?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -329,6 +414,35 @@ mod tests {
         let err = post(&conn, caller, "Caller", 10, &msg(announcements, "Hi")).unwrap_err();
         assert!(err.to_string().contains("can't post"));
         assert!(post(&conn, caller, "Caller", 10, &msg(general(&conn), "")).is_err());
+    }
+
+    #[test]
+    fn sysop_area_management() {
+        let (conn, sysop, _) = setup();
+        let settings = AreaSettings {
+            conference_id: 1,
+            name: "Retro Games".into(),
+            description: "Old school".into(),
+            read_level: 10,
+            post_level: 10,
+        };
+        let id = add_area(&conn, &settings).unwrap();
+        assert!(
+            add_area(&conn, &settings).is_err(),
+            "names are unique per conference"
+        );
+        post(&conn, sysop, "Sysop Sam", 99, &msg(id, "Hi")).unwrap();
+        let mut changed = settings.clone();
+        changed.post_level = 50;
+        update_area(&conn, id, &changed).unwrap();
+        let all = all_area_settings(&conn).unwrap();
+        let found = all.iter().find(|(i, ..)| *i == id).unwrap();
+        assert_eq!((found.1.post_level, found.2), (50, 1));
+        delete_area(&conn, id).unwrap();
+        assert!(
+            get(&conn, 1).unwrap().is_none(),
+            "messages go with the area"
+        );
     }
 
     #[test]

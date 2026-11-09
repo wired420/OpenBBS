@@ -61,3 +61,14 @@ go.
   still reach the login prompt as before.
 - New config settings: `ssh.public_host` (shown in transfer instructions) and
   `files.max_upload_mb`.
+- Door games: list doors in `doors/doors.toml` (an example is written by
+  `openbbs init`). OpenBBS writes DOOR.SYS and DOOR32.SYS for the caller's
+  node, runs the door, and connects its input and output to the caller, with
+  CP437 output converted for modern terminals. Doors can require an access
+  level. Menu actions `doors` and `door:ID`.
+- Sysop console on the sysop menu: manage users (access level, password
+  reset, delete), add/edit/delete message areas and file areas, and rescan
+  file folders.
+- `openbbs passwd HANDLE` and `openbbs set-level HANDLE LEVEL` for fixing
+  accounts from the command line, even when the sysop is locked out.
+- Command-line errors print one clear line instead of a stack trace.

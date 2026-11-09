@@ -45,12 +45,28 @@ cargo run -- run             # start the board (SSH on port 2222 by default)
 Then call it from any SSH client:
 
 ```sh
-ssh -p 2222 new@localhost        # type NEW at the prompt to sign up
-ssh -p 2222 yourhandle@localhost # skips straight to the password prompt
+ssh -p 2222 new@localhost          # sign up: type NEW at the prompt
+ssh -p 2222 yourhandle@localhost   # asks for your BBS password, then the main menu
+sftp -P 2222 yourhandle@localhost  # file areas show up as folders
 ```
 
 The first account created becomes the sysop. `openbbs check` validates the
 config and database without starting the server.
+
+## Running the board
+
+- **Message boards and mail** work out of the box. Add or change areas from
+  the Sysop Menu.
+- **File areas** are folders under `data/files/`. Callers transfer files with
+  SFTP using their handle and BBS password. Files you copy into a folder
+  yourself appear after a restart or Sysop Menu → Rescan File Folders. Set
+  `ssh.public_host` in `openbbs.toml` so transfer instructions show your
+  address.
+- **Door games** are listed in `doors/doors.toml`; the file explains each
+  setting. OpenBBS writes DOOR.SYS and DOOR32.SYS and connects the door's
+  standard input and output to the caller.
+- **Locked out?** `openbbs passwd HANDLE` sets a new password and
+  `openbbs set-level HANDLE 99` makes someone sysop.
 
 ## Customizing
 

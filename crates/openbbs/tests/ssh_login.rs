@@ -127,9 +127,14 @@ async fn start_board() -> std::net::SocketAddr {
 }
 
 async fn start_board_with_files(files: std::path::PathBuf) -> std::net::SocketAddr {
+    start_board_with(|c| c.paths.files = files).await
+}
+
+async fn start_board_with(customize: impl FnOnce(&mut Config)) -> std::net::SocketAddr {
     let mut config = Config::default();
     config.bbs.name = "Test Board".into();
-    config.paths.files = files;
+    config.paths.files = std::env::temp_dir().join("openbbs-test-unused-files");
+    customize(&mut config);
     // Use the built-in theme.
     config.paths.themes = std::env::temp_dir().join("openbbs-no-such-theme-dir");
     let store = Store::open_in_memory().unwrap();
@@ -472,4 +477,118 @@ async fn sftp_upload_list_download() {
     other.remove_file("/uploads/hello.txt").await.unwrap();
     assert!(!files.join("uploads/hello.txt").exists());
     let _ = std::fs::remove_dir_all(&files);
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn door_gets_drop_file_and_terminal() {
+    let base = std::env::temp_dir().join(format!("openbbs-door-test-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    let doors = base.join("doors");
+    std::fs::create_dir_all(&doors).unwrap();
+    // A tiny "door": prints the handle from DOOR32.SYS, echoes one line back,
+    // and shows a CP437 block to prove the conversion.
+    std::fs::write(
+        doors.join("doors.toml"),
+        r#"
+[[door]]
+id = "echo"
+name = "Echo Door"
+command = "sh"
+args = ["-c", "printf 'Player: '; sed -n 7p {door32} | tr -d '\\r'; read line; printf 'You said %s \\333\\n' \"$line\""]
+
+[[door]]
+id = "secret"
+name = "Sysop Only"
+command = "true"
+level = 99
+"#,
+    )
+    .unwrap();
+    let (data, doors_dir) = (base.join("data"), doors.clone());
+    let addr = start_board_with(move |c| {
+        c.paths.doors = doors_dir;
+        c.paths.data = data;
+    })
+    .await;
+    sign_up(addr, "First Sysop", "hunter42").await;
+    sign_up(addr, "Gamer", "secret99").await;
+
+    let c = Caller::connect_with(addr, "Gamer", Some("secret99")).await;
+    c.expect("Press any key").await;
+    c.send(" ").await;
+    c.expect("Main »").await;
+    c.send("d").await;
+    let list = c.expect("Echo Door").await;
+    assert!(!list.contains("Sysop Only"), "level-gated door is hidden");
+    c.send("\r").await;
+    c.expect("Player: Gamer").await;
+    c.send("hello door\n").await;
+    c.expect("You said hello door █").await;
+    c.expect("Back at Test Board from Echo Door").await;
+    c.send(" ").await;
+    c.expect("Door Games").await;
+    assert!(base.join("data/nodes/node1/DOOR.SYS").is_file());
+    let _ = std::fs::remove_dir_all(&base);
+}
+
+#[tokio::test]
+async fn sysop_console_manages_areas_and_users() {
+    let addr = start_board().await;
+    sign_up(addr, "Boss", "hunter42").await;
+    sign_up(addr, "Pal", "secret99").await;
+
+    let boss = Caller::connect_with(addr, "Boss", Some("hunter42")).await;
+    boss.expect("Press any key").await;
+    boss.send(" ").await;
+    boss.expect("Main »").await;
+    boss.send("s").await;
+    boss.expect("[Sysop] »").await;
+
+    // Add a message area.
+    boss.send("m").await;
+    boss.expect("Sysop · Message Areas").await;
+    boss.send("a").await;
+    boss.expect("Name:").await;
+    boss.send("Retro Games\r").await;
+    boss.expect("Description:").await;
+    boss.send("Old stuff\r").await;
+    boss.expect("Level to read [10]").await;
+    boss.send("\r").await;
+    boss.expect("Level to post [10]").await;
+    boss.send("\r").await;
+    boss.expect("Area added.").await;
+    boss.send(" ").await;
+    boss.expect("Retro Games").await;
+    boss.send("q").await;
+    boss.expect("[Sysop] »").await;
+
+    // Raise Pal's level (users are sorted: Boss, Pal).
+    boss.send("u").await;
+    boss.expect("Sysop · Users").await;
+    boss.send("\x1b[Bl").await;
+    boss.expect("Access level for Pal").await;
+    boss.send("50\r").await;
+    boss.expect("Level updated.").await;
+    boss.send(" ").await;
+    // The sysop can't demote themselves.
+    boss.send("\x1b[Al").await;
+    boss.expect("Access level for Boss").await;
+    boss.send("10\r").await;
+    boss.expect("can't take away your own sysop access").await;
+    boss.send(" ").await;
+    boss.send("q").await;
+    boss.expect("[Sysop] »").await;
+
+    // Pal sees the new area and their new level.
+    let pal = Caller::connect_with(addr, "Pal", Some("secret99")).await;
+    pal.expect("Press any key").await;
+    pal.send(" ").await;
+    pal.expect("Main »").await;
+    pal.send("m").await;
+    pal.expect("Retro Games").await;
+    pal.send("q").await;
+    pal.expect("Main »").await;
+    pal.send("a").await;
+    pal.expect("Access level  50").await;
 }

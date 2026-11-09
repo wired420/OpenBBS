@@ -32,6 +32,18 @@ enum Command {
     Check,
     /// Start the BBS and listen for SSH callers.
     Run,
+    /// Set a user's password (for when someone, even the sysop, is locked out).
+    Passwd {
+        /// The user's handle.
+        handle: String,
+    },
+    /// Set a user's access level (90 or more is sysop).
+    SetLevel {
+        /// The user's handle.
+        handle: String,
+        /// New level, 0 to 99.
+        level: i64,
+    },
 }
 
 fn main() -> Result<()> {
@@ -42,10 +54,20 @@ fn main() -> Result<()> {
         .init();
 
     let cli = Cli::parse();
+    if let Err(e) = dispatch(cli) {
+        eprintln!("Error: {e:#}");
+        std::process::exit(1);
+    }
+    Ok(())
+}
+
+fn dispatch(cli: Cli) -> Result<()> {
     match cli.command {
         Command::Init { force } => init(&cli.config, force),
         Command::Check => check(&cli.config),
         Command::Run => run(&cli.config),
+        Command::Passwd { handle } => passwd(&cli.config, &handle),
+        Command::SetLevel { handle, level } => set_level(&cli.config, &handle, level),
     }
 }
 
@@ -68,6 +90,11 @@ fn init(path: &Path, force: bool) -> Result<()> {
     }
     db::open(&config.database_path())?;
     let theme_files = theme::install_default(&config.theme_dir())?;
+    let doors_toml = config.paths.doors.join("doors.toml");
+    if !doors_toml.exists() {
+        std::fs::write(&doors_toml, openbbs_core::doors::EXAMPLE_DOORS_TOML)?;
+    }
+    openbbs_core::files::sync(&db::open(&config.database_path())?, &config.paths.files)?;
     ssh::load_or_create_host_key(&config.ssh.host_key)?;
     println!(
         "OpenBBS {VERSION}: wrote {} and created the database.",
@@ -127,4 +154,37 @@ fn run(path: &Path) -> Result<()> {
             }
         }
     })
+}
+
+fn find_user(conn: &rusqlite::Connection, handle: &str) -> Result<openbbs_core::users::User> {
+    openbbs_core::users::find_for_login(conn, handle)?
+        .map(|(user, _)| user)
+        .with_context(|| format!("there's no user named {handle}"))
+}
+
+fn passwd(path: &Path, handle: &str) -> Result<()> {
+    use openbbs_core::users;
+    let config = Config::load(path)?;
+    let conn = db::open(&config.database_path())?;
+    let user = find_user(&conn, handle)?;
+    eprintln!(
+        "New password for {} (it will show as you type):",
+        user.handle
+    );
+    let mut password = String::new();
+    std::io::stdin().read_line(&mut password)?;
+    let password = password.trim();
+    users::validate_password(password)?;
+    users::set_password_hash(&conn, user.id, &users::hash_password(password)?)?;
+    println!("Password changed for {}.", user.handle);
+    Ok(())
+}
+
+fn set_level(path: &Path, handle: &str, level: i64) -> Result<()> {
+    let config = Config::load(path)?;
+    let conn = db::open(&config.database_path())?;
+    let user = find_user(&conn, handle)?;
+    openbbs_core::users::set_level(&conn, user.id, level)?;
+    println!("{} is now access level {level}.", user.handle);
+    Ok(())
 }

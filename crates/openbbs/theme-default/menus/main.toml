@@ -12,6 +12,7 @@
 #   messages      message areas                 newscan    read all new messages
 #   mail          private mailbox               sendmail   write a letter
 #   files         file areas                    rescanfiles  (sysop) sync files with disk
+#   doors         door games list               door:ID    launch one door from doors.toml
 #   screen:NAME   show screens/NAME             comingsoon:WHAT  placeholder
 # Add `level = 90` to hide an item from callers below that access level.
 
@@ -43,7 +44,7 @@ action = "files"
 [[item]]
 key = "D"
 label = "Door Games"
-action = "comingsoon:Door games"
+action = "doors"
 
 [[item]]
 key = "W"

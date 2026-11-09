@@ -151,6 +151,23 @@ impl Term {
         }
     }
 
+    /// Send bytes exactly as given (no newline conversion).
+    pub fn write_raw(&self, bytes: Vec<u8>) -> TermResult<()> {
+        self.output.send(bytes).map_err(|_| Hangup::Disconnected)
+    }
+
+    /// Wait for the next chunk of raw input bytes, for passing straight
+    /// through to a door program. Keys already decoded are discarded.
+    pub async fn read_raw(&mut self) -> TermResult<Vec<u8>> {
+        self.pending.clear();
+        self.decoder = KeyDecoder::default();
+        match timeout(self.idle, self.input.recv()).await {
+            Ok(Some(bytes)) => Ok(bytes),
+            Ok(None) => Err(Hangup::Disconnected),
+            Err(_) => Err(Hangup::Idle),
+        }
+    }
+
     /// Show a prompt and wait for any key.
     pub async fn pause(&mut self) -> TermResult<()> {
         let prompt = "|08[|07Press any key|08]";

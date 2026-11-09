@@ -220,6 +220,85 @@ pub fn delete(conn: &Connection, files_root: &Path, id: i64) -> Result<()> {
     Ok(())
 }
 
+/// A file area's settings, for the sysop.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AreaSettings {
+    pub name: String,
+    pub description: String,
+    pub folder: String,
+    pub download_level: i64,
+    pub upload_level: i64,
+}
+
+fn check_area(settings: &AreaSettings) -> Result<()> {
+    if settings.name.trim().is_empty() || settings.name.chars().count() > 40 {
+        bail!("Area names must be 1 to 40 characters.");
+    }
+    if settings.folder.is_empty()
+        || settings.folder.len() > 40
+        || !settings
+            .folder
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
+        bail!("Folder names may use letters, numbers, - and _ only.");
+    }
+    for level in [settings.download_level, settings.upload_level] {
+        if !(0..=99).contains(&level) {
+            bail!("Levels run from 0 to 99.");
+        }
+    }
+    Ok(())
+}
+
+pub fn add_area(conn: &Connection, files_root: &Path, settings: &AreaSettings) -> Result<i64> {
+    check_area(settings)?;
+    conn.execute(
+        "INSERT INTO file_areas (name, description, folder, download_level, upload_level)
+         VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![
+            settings.name.trim(),
+            settings.description.trim(),
+            settings.folder.to_ascii_lowercase(),
+            settings.download_level,
+            settings.upload_level
+        ],
+    )
+    .map_err(|e| anyhow::anyhow!("Couldn't add the area (is the name or folder taken?): {e}"))?;
+    fs::create_dir_all(files_root.join(settings.folder.to_ascii_lowercase()))?;
+    Ok(conn.last_insert_rowid())
+}
+
+/// Change an area's name, description and levels (the folder stays).
+pub fn update_area(conn: &Connection, id: i64, settings: &AreaSettings) -> Result<()> {
+    check_area(settings)?;
+    conn.execute(
+        "UPDATE file_areas SET name = ?2, description = ?3, download_level = ?4,
+             upload_level = ?5 WHERE id = ?1",
+        params![
+            id,
+            settings.name.trim(),
+            settings.description.trim(),
+            settings.download_level,
+            settings.upload_level
+        ],
+    )?;
+    Ok(())
+}
+
+/// Remove an empty file area. The folder on disk is left alone.
+pub fn delete_area(conn: &Connection, id: i64) -> Result<()> {
+    let count: i64 =
+        conn.query_row("SELECT count(*) FROM files WHERE area_id = ?1", [id], |r| {
+            r.get(0)
+        })?;
+    if count > 0 {
+        bail!("The area still has {count} files. Delete them first.");
+    }
+    conn.execute("DELETE FROM file_areas WHERE id = ?1", [id])?;
+    Ok(())
+}
+
 /// What [`sync`] changed.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct SyncReport {
@@ -345,6 +424,35 @@ mod tests {
         sync(&conn, &root).unwrap();
         fs::remove_file(dir.join("gone.txt")).unwrap();
         assert_eq!(sync(&conn, &root).unwrap().removed, 1);
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn sysop_area_management() {
+        let conn = db::open_in_memory().unwrap();
+        let root = std::env::temp_dir().join(format!("openbbs-fa-{}", std::process::id()));
+        let settings = AreaSettings {
+            name: "Utilities".into(),
+            description: "Handy tools".into(),
+            folder: "Utils".into(),
+            download_level: 10,
+            upload_level: 20,
+        };
+        let id = add_area(&conn, &root, &settings).unwrap();
+        assert!(root.join("utils").is_dir());
+        assert!(area_by_folder(&conn, "UTILS").unwrap().is_some());
+        let mut bad = settings.clone();
+        bad.folder = "../etc".into();
+        assert!(add_area(&conn, &root, &bad).is_err());
+        record_upload(&conn, id, "tool.zip", 3, None).unwrap();
+        assert!(
+            delete_area(&conn, id).is_err(),
+            "areas with files can't be deleted"
+        );
+        let file = find(&conn, id, "tool.zip").unwrap().unwrap();
+        conn.execute("DELETE FROM files WHERE id = ?1", [file.id])
+            .unwrap();
+        delete_area(&conn, id).unwrap();
         let _ = fs::remove_dir_all(&root);
     }
 

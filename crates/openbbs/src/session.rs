@@ -374,6 +374,11 @@ impl Session {
                 Action::SendMail => self.send_mail(term, None).await?,
                 Action::Files => self.file_areas(term).await?,
                 Action::RescanFiles => self.rescan_files(term).await?,
+                Action::Doors => self.door_list(term).await?,
+                Action::Door(id) => self.run_door(term, &id).await?,
+                Action::SysopUsers => self.sysop_users(term).await?,
+                Action::SysopMessageAreas => self.sysop_message_areas(term).await?,
+                Action::SysopFileAreas => self.sysop_file_areas(term).await?,
                 Action::ComingSoon(what) => {
                     let text = theme
                         .screen("comingsoon")?
