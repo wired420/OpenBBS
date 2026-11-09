@@ -1,0 +1,11 @@
+# Colors for menus that OpenBBS draws itself (menus without a custom screen).
+# Values are pipe color codes: |00-|15 foreground, |16-|23 background.
+[colors]
+frame     = "|09"   # box around the menu title
+title     = "|15"   # menu title
+subtitle  = "|03"   # text under the title
+key       = "|11"   # hotkey letter
+bracket   = "|08"   # the [ ] around hotkeys
+label     = "|07"   # item text
+highlight = "|15|17" # selected item in lightbar menus
+hint      = "|08"   # the help line at the bottom

@@ -1,0 +1,64 @@
+# The main menu. Edit freely: changes show up the next time a caller opens it,
+# no restart needed.
+#
+#   style  = "lightbar" (arrow keys + Enter, hotkeys still work) or "hotkey"
+#   screen = an optional file in screens/ to show instead of the drawn menu
+#   prompt = text shown at the bottom (pipe codes and @TOKENS@ allowed)
+#
+# Each [[item]] needs a single-letter key, a label and an action:
+#   menu:NAME     open menus/NAME.toml          back       return to the previous menu
+#   who           who's online                  userlist   list of users
+#   userinfo      the caller's account          logoff     say goodbye and hang up
+#   screen:NAME   show screens/NAME             comingsoon:WHAT  placeholder
+# Add `level = 90` to hide an item from callers below that access level.
+
+title = "Main Menu"
+subtitle = "@BBSNAME@"
+style = "lightbar"
+prompt = "|08[|15@USER@|08] |07Main |08» |07"
+
+[[item]]
+key = "M"
+label = "Message Boards"
+action = "comingsoon:Message boards"
+
+[[item]]
+key = "E"
+label = "Private Mail"
+action = "comingsoon:Private mail"
+
+[[item]]
+key = "F"
+label = "File Areas"
+action = "comingsoon:File areas"
+
+[[item]]
+key = "D"
+label = "Door Games"
+action = "comingsoon:Door games"
+
+[[item]]
+key = "W"
+label = "Who's Online"
+action = "who"
+
+[[item]]
+key = "U"
+label = "User List"
+action = "userlist"
+
+[[item]]
+key = "A"
+label = "Your Account"
+action = "userinfo"
+
+[[item]]
+key = "S"
+label = "Sysop Menu"
+action = "menu:sysop"
+level = 90
+
+[[item]]
+key = "G"
+label = "Goodbye"
+action = "logoff"

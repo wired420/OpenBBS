@@ -38,9 +38,30 @@ cargo xtask bump major       # 0.4.2 -> 1.0.0
 ## Running
 
 ```sh
-cargo run -- init            # write a default openbbs.toml and create the database
-cargo run -- check           # validate the config and database
+cargo run -- init            # write openbbs.toml, the database, host key and default theme
+cargo run -- run             # start the board (SSH on port 2222 by default)
 ```
+
+Then call it from any SSH client:
+
+```sh
+ssh -p 2222 new@localhost        # type NEW at the prompt to sign up
+ssh -p 2222 yourhandle@localhost # skips straight to the password prompt
+```
+
+The first account created becomes the sysop. `openbbs check` validates the
+config and database without starting the server.
+
+## Customizing
+
+Everything callers see lives in `themes/default/`:
+
+- `menus/*.toml`: menus, their hotkeys, actions and access levels. Comments in
+  `menus/main.toml` list every action. Edits apply immediately.
+- `screens/*.ans` / `*.txt`: ANSI art and text screens. Classic CP437 `.ans`
+  files work as-is. Text can use pipe color codes (`|15` bright white, `|01`
+  blue, ...) and tokens like `@USER@`, `@BBSNAME@` and `@NODE@`.
+- `theme.toml`: colors for the menus OpenBBS draws itself.
 
 ## License
 

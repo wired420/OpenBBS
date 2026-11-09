@@ -1,0 +1,8 @@
+|CL
+|11  New user signup
+|08  ─────────────────────────────────────────────
+|07  Pick a |15handle|07: the name everyone here will know you by.
+|07  Your real name and location are optional.
+|07  Be decent to other callers, and have fun.
+|08  ─────────────────────────────────────────────
+

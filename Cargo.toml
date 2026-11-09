@@ -10,13 +10,17 @@ version = "0.0.0"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/wired420/OpenBBS"
-rust-version = "1.85"
+rust-version = "1.89"
 
 [workspace.dependencies]
 anyhow = "1"
+argon2 = "0.6"
 clap = { version = "4.6", features = ["derive"] }
+rand = "0.10"
 rusqlite = { version = "0.41", features = ["bundled"] }
+russh = { version = "0.63", default-features = false, features = ["flate2", "ring"] }
 serde = { version = "1", features = ["derive"] }
+tokio = { version = "1", features = ["full"] }
 toml = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
