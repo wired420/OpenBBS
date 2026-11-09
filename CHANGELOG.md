@@ -7,6 +7,10 @@ go.
 
 ## [Unreleased]
 
+### Added
+- `scripts/publish-wiki.sh` publishes the README, setup guide and door guide
+  to the GitHub wiki.
+
 ## [0.0.1] - 2026-11-09
 
 ### Added
