@@ -9,6 +9,10 @@
 #   menu:NAME     open menus/NAME.toml          back       return to the previous menu
 #   who           who's online                  userlist   list of users
 #   userinfo      the caller's account          logoff     say goodbye and hang up
+#   messages      message areas                 newscan    read all new messages
+#   mail          private mailbox               sendmail   write a letter
+#   files         file areas                    rescanfiles  (sysop) sync files with disk
+#   doors         door games list               door:ID    launch one door from doors.toml
 #   screen:NAME   show screens/NAME             comingsoon:WHAT  placeholder
 # Add `level = 90` to hide an item from callers below that access level.
 
@@ -20,22 +24,27 @@ prompt = "|08[|15@USER@|08] |07Main |08» |07"
 [[item]]
 key = "M"
 label = "Message Boards"
-action = "comingsoon:Message boards"
+action = "messages"
+
+[[item]]
+key = "N"
+label = "New Message Scan"
+action = "newscan"
 
 [[item]]
 key = "E"
 label = "Private Mail"
-action = "comingsoon:Private mail"
+action = "mail"
 
 [[item]]
 key = "F"
 label = "File Areas"
-action = "comingsoon:File areas"
+action = "files"
 
 [[item]]
 key = "D"
 label = "Door Games"
-action = "comingsoon:Door games"
+action = "doors"
 
 [[item]]
 key = "W"

@@ -1,8 +1,13 @@
 //! The SSH front end. Every connection that opens a shell gets a BBS session.
 //!
-//! SSH authentication accepts every caller: the BBS does its own login, the
-//! way a dial-up board answered every call and then asked for your handle. If
-//! the SSH user name matches a handle, the login prompt skips to the password.
+//! Logging in:
+//!
+//! * `ssh yourhandle@host` asks for your BBS password at the SSH level and
+//!   drops you straight at the main menu. This is also how SFTP (file
+//!   transfers) logs in.
+//! * Any other user name (`ssh new@host`, `ssh bbs@host`) is let in as a
+//!   guest, the way a dial-up board answered every call, and the BBS asks for
+//!   a handle or NEW.
 
 use std::net::SocketAddr;
 use std::path::Path;
@@ -17,7 +22,10 @@ use tokio::net::TcpListener;
 use tokio::sync::{mpsc, watch};
 
 use crate::session::{self, Bbs, Caller};
+use crate::sftp::SftpSession;
+use crate::store::blocking;
 use crate::term::Term;
+use openbbs_core::users::{self, User};
 
 /// Load the host key, creating one on first run.
 pub fn load_or_create_host_key(path: &Path) -> Result<PrivateKey> {
@@ -48,7 +56,6 @@ fn server_config(key: PrivateKey, idle_minutes: u32) -> russh::server::Config {
     let mut methods = MethodSet::empty();
     methods.push(MethodKind::None);
     methods.push(MethodKind::Password);
-    methods.push(MethodKind::KeyboardInteractive);
     russh::server::Config {
         methods,
         keys: vec![key],
@@ -81,7 +88,9 @@ impl Server for BbsServer {
             bbs: self.bbs.clone(),
             peer,
             ssh_user: String::new(),
+            user: None,
             channel: None,
+            channel_handle: None,
             input: None,
             size: watch::channel((80, 24)).0,
             started: false,
@@ -97,7 +106,11 @@ struct Connection {
     bbs: Arc<Bbs>,
     peer: Option<SocketAddr>,
     ssh_user: String,
+    /// Set when the SSH login used a real handle and password.
+    user: Option<User>,
     channel: Option<ChannelId>,
+    /// The channel object, kept until we know whether it's a shell or SFTP.
+    channel_handle: Option<Channel<Msg>>,
     input: Option<mpsc::Sender<Vec<u8>>>,
     size: watch::Sender<(u16, u16)>,
     started: bool,
@@ -112,6 +125,17 @@ fn clamp_size(cols: u32, rows: u32) -> (u16, u16) {
 }
 
 impl Connection {
+    async fn handle_exists(&self, user: &str) -> Result<bool> {
+        if users::validate_handle(user).is_err() {
+            return Ok(false);
+        }
+        let handle = user.to_string();
+        self.bbs
+            .store
+            .call(move |c| users::handle_taken(c, &handle))
+            .await
+    }
+
     fn start_session(&mut self, channel: ChannelId, handle: Handle) {
         if self.started {
             return;
@@ -125,6 +149,7 @@ impl Connection {
         let caller = Caller {
             peer: self.peer,
             ssh_user: self.ssh_user.clone(),
+            user: self.user.clone(),
         };
         let bbs = self.bbs.clone();
 
@@ -149,17 +174,44 @@ impl Handler for Connection {
 
     async fn auth_none(&mut self, user: &str) -> Result<Auth, Self::Error> {
         self.ssh_user = user.to_string();
-        Ok(Auth::Accept)
+        // Real handles must give their password; anyone else is a guest.
+        if self.handle_exists(user).await? {
+            Ok(Auth::reject())
+        } else {
+            Ok(Auth::Accept)
+        }
     }
 
-    async fn auth_password(&mut self, user: &str, _password: &str) -> Result<Auth, Self::Error> {
+    async fn auth_password(&mut self, user: &str, password: &str) -> Result<Auth, Self::Error> {
         self.ssh_user = user.to_string();
-        Ok(Auth::Accept)
+        let handle = user.to_string();
+        let found = self
+            .bbs
+            .store
+            .call(move |c| users::find_for_login(c, &handle))
+            .await?;
+        let Some((found, hash)) = found else {
+            return Ok(Auth::Accept);
+        };
+        let password = password.to_string();
+        if blocking(move || users::verify_password(&password, &hash)).await? {
+            tracing::info!(user = found.handle, peer = ?self.peer, "ssh password login");
+            self.user = Some(found);
+            Ok(Auth::Accept)
+        } else {
+            tracing::info!(user, peer = ?self.peer, "ssh password rejected");
+            Ok(Auth::reject())
+        }
     }
 
     async fn auth_publickey(&mut self, user: &str, _key: &PublicKey) -> Result<Auth, Self::Error> {
+        // No stored keys yet: real handles fall back to their password.
         self.ssh_user = user.to_string();
-        Ok(Auth::Accept)
+        if self.handle_exists(user).await? {
+            Ok(Auth::reject())
+        } else {
+            Ok(Auth::Accept)
+        }
     }
 
     async fn channel_open_session(
@@ -173,6 +225,7 @@ impl Handler for Connection {
             return Ok(());
         }
         self.channel = Some(channel.id());
+        self.channel_handle = Some(channel);
         reply.accept().await;
         Ok(())
     }
@@ -212,7 +265,35 @@ impl Handler for Connection {
         session: &mut Session,
     ) -> Result<(), Self::Error> {
         session.channel_success(channel)?;
+        // The shell is driven through the session handle.
+        self.channel_handle = None;
         self.start_session(channel, session.handle());
+        Ok(())
+    }
+
+    async fn subsystem_request(
+        &mut self,
+        channel: ChannelId,
+        name: &str,
+        session: &mut Session,
+    ) -> Result<(), Self::Error> {
+        let user = self.user.clone();
+        match (name, user, self.channel_handle.take()) {
+            ("sftp", Some(user), Some(handle)) if !self.started => {
+                self.started = true;
+                session.channel_success(channel)?;
+                let sftp = SftpSession::new(self.bbs.clone(), user);
+                russh_sftp::server::run(handle.into_stream(), sftp).await;
+            }
+            ("sftp", None, _) => {
+                tracing::info!(
+                    user = self.ssh_user,
+                    "sftp refused: not logged in with a handle"
+                );
+                session.channel_failure(channel)?;
+            }
+            _ => session.channel_failure(channel)?,
+        }
         Ok(())
     }
 

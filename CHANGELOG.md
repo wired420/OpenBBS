@@ -33,3 +33,42 @@ go.
 - CP437 to UTF-8 conversion so classic `.ans` art displays correctly, pipe
   color codes (`|00`-`|23`) and `@TOKENS@` such as `@USER@` and `@BBSNAME@`.
 - Idle callers are disconnected after `bbs.idle_minutes`.
+- Message boards: area list with total and new counts, message lists,
+  a reader with next/previous/reply, posting with To and Subject, quoted
+  replies, per-user read pointers, a new message scan across every area,
+  and "catch up". Areas can limit who reads and who posts by access level.
+  Sysops and authors can delete messages.
+- Private mail: inbox with unread markers, reading, sending, replying with
+  quotes, and deleting. Callers are told about new mail and new posts at
+  login and can jump straight to their mail.
+- A line editor for messages and mail with automatic word wrap and `/S`
+  save, `/A` abort, `/L` list and `/D` delete-line commands.
+- Scrolling lightbar lists (arrows, Page Up/Down, Home/End) used for areas,
+  messages and mail.
+- New menu actions: `messages`, `newscan`, `mail` and `sendmail`.
+- File areas over SFTP: log in with `sftp yourhandle@host` (handle and BBS
+  password) to browse areas as folders, download, and upload where your
+  access level allows. Uploads land in a temporary file and only appear once
+  complete; uploads over `files.max_upload_mb` are refused. Downloads are
+  counted.
+- File area screens: area and file lists with sizes, dates and download
+  counts, file details with ready-to-paste `sftp` commands, and describe or
+  delete for the uploader and sysop.
+- Files the sysop copies into an area folder are picked up at startup or with
+  Rescan File Areas on the sysop menu.
+- `ssh yourhandle@host` now checks your BBS password at the SSH level and
+  goes straight to the main menu. Other user names (like `new` or `bbs`)
+  still reach the login prompt as before.
+- New config settings: `ssh.public_host` (shown in transfer instructions) and
+  `files.max_upload_mb`.
+- Door games: list doors in `doors/doors.toml` (an example is written by
+  `openbbs init`). OpenBBS writes DOOR.SYS and DOOR32.SYS for the caller's
+  node, runs the door, and connects its input and output to the caller, with
+  CP437 output converted for modern terminals. Doors can require an access
+  level. Menu actions `doors` and `door:ID`.
+- Sysop console on the sysop menu: manage users (access level, password
+  reset, delete), add/edit/delete message areas and file areas, and rescan
+  file folders.
+- `openbbs passwd HANDLE` and `openbbs set-level HANDLE LEVEL` for fixing
+  accounts from the command line, even when the sysop is locked out.
+- Command-line errors print one clear line instead of a stack trace.

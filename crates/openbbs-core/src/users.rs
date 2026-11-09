@@ -192,6 +192,41 @@ pub fn record_login(conn: &Connection, id: i64) -> Result<User> {
     find_by_id(conn, id)?.context("user not found")
 }
 
+/// Every user, by handle.
+pub fn list_all(conn: &Connection) -> Result<Vec<User>> {
+    let mut stmt = conn.prepare(&format!(
+        "SELECT {USER_COLUMNS} FROM users ORDER BY handle COLLATE NOCASE"
+    ))?;
+    let rows = stmt.query_map([], User::from_row)?;
+    Ok(rows.collect::<rusqlite::Result<_>>()?)
+}
+
+pub fn set_level(conn: &Connection, id: i64, level: i64) -> Result<()> {
+    if !(0..=LEVEL_FIRST_USER).contains(&level) {
+        bail!("Access levels run from 0 to {LEVEL_FIRST_USER}.");
+    }
+    conn.execute(
+        "UPDATE users SET access_level = ?2 WHERE id = ?1",
+        params![id, level],
+    )?;
+    Ok(())
+}
+
+/// Store a new (already hashed) password.
+pub fn set_password_hash(conn: &Connection, id: i64, hash: &str) -> Result<()> {
+    conn.execute(
+        "UPDATE users SET password_hash = ?2 WHERE id = ?1",
+        params![id, hash],
+    )?;
+    Ok(())
+}
+
+/// Delete an account. Their posts stay (by name); their mailbox goes.
+pub fn delete(conn: &Connection, id: i64) -> Result<()> {
+    conn.execute("DELETE FROM users WHERE id = ?1", [id])?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -237,6 +272,13 @@ mod tests {
         let (found, hash) = find_for_login(&conn, "CLAYTON").unwrap().unwrap();
         assert_eq!(found.id, first.id);
         assert_eq!(hash, "h");
+        set_level(&conn, second.id, 50).unwrap();
+        assert!(set_level(&conn, second.id, 500).is_err());
+        set_password_hash(&conn, second.id, "new").unwrap();
+        assert_eq!(find_for_login(&conn, "caller").unwrap().unwrap().1, "new");
+        assert_eq!(list_all(&conn).unwrap().len(), 2);
+        delete(&conn, second.id).unwrap();
+        assert_eq!(list_all(&conn).unwrap().len(), 1);
         let after = record_login(&conn, first.id).unwrap();
         assert_eq!(after.times_called, 1);
         assert!(after.last_login_at.is_some());

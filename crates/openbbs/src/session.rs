@@ -45,6 +45,8 @@ pub struct Caller {
     pub peer: Option<SocketAddr>,
     /// The user name the SSH client logged in with.
     pub ssh_user: String,
+    /// Set when SSH already checked the caller's handle and password.
+    pub user: Option<User>,
 }
 
 const LOGIN_ATTEMPTS: usize = 3;
@@ -81,10 +83,10 @@ pub async fn run(bbs: Arc<Bbs>, mut term: Term, caller: Caller) {
     );
 }
 
-struct Session {
-    bbs: Arc<Bbs>,
-    node: NodeGuard,
-    user: Option<User>,
+pub(crate) struct Session {
+    pub(crate) bbs: Arc<Bbs>,
+    pub(crate) node: NodeGuard,
+    pub(crate) user: Option<User>,
 }
 
 impl Session {
@@ -94,9 +96,18 @@ impl Session {
         self.show_screen(term, &theme, "welcome-info")?;
         term.println("")?;
 
-        let Some(user) = self.login(term, &caller.ssh_user).await? else {
-            term.println("|12Too many failed attempts. Goodbye.")?;
-            return Ok(());
+        let user = match &caller.user {
+            Some(user) => {
+                term.println(&format!("|07Logged in as |15{}|07.", user.handle))?;
+                user.clone()
+            }
+            None => match self.login(term).await? {
+                Some(user) => user,
+                None => {
+                    term.println("|12Too many failed attempts. Goodbye.")?;
+                    return Ok(());
+                }
+            },
         };
         let user = self
             .bbs
@@ -115,7 +126,31 @@ impl Session {
             term.println(&format!("|07Last time you called: |15{last} UTC"))?;
         }
         self.user = Some(user);
-        term.pause().await?;
+        let (me, _) = self.me();
+        let level = self.level();
+        let (new_mail, new_posts) = self
+            .bbs
+            .store
+            .call(move |c| {
+                Ok((
+                    openbbs_core::mail::unread_count(c, me)?,
+                    openbbs_core::messages::total_new(c, me, level)?,
+                ))
+            })
+            .await?;
+        if new_posts > 0 {
+            term.println(&format!(
+                "|07There are |14{new_posts}|07 new messages on the boards."
+            ))?;
+        }
+        if new_mail > 0 {
+            term.println(&format!("|14You have {new_mail} new private mail."))?;
+            if term.yes_no("|07Read your mail now?", true).await? {
+                self.mailbox(term).await?;
+            }
+        } else {
+            term.pause().await?;
+        }
 
         self.menu_loop(term).await?;
 
@@ -127,35 +162,14 @@ impl Session {
     }
 
     /// Ask for a handle (or NEW) and password. `None` after too many failures.
-    async fn login(&mut self, term: &mut Term, ssh_user: &str) -> Result<Option<User>> {
-        // If the SSH user name is a real handle, skip straight to the password.
-        let mut suggested = {
-            let name = ssh_user.to_string();
-            if users::validate_handle(&name).is_ok() {
-                let exists = self
-                    .bbs
-                    .store
-                    .call(move |c| users::handle_taken(c, &name))
-                    .await?;
-                exists.then(|| ssh_user.to_string())
-            } else {
-                None
-            }
-        };
+    async fn login(&mut self, term: &mut Term) -> Result<Option<User>> {
         for _ in 0..LOGIN_ATTEMPTS {
-            let handle = match suggested.take() {
-                Some(h) => {
-                    term.println(&format!("|07Handle: |15{h}"))?;
-                    h
-                }
-                None => {
-                    term.ask(
-                        "|07Enter your |15handle|07, or |11NEW|07 to sign up: ",
-                        LineOpts::text(users::HANDLE_MAX),
-                    )
-                    .await?
-                }
-            };
+            let handle = term
+                .ask(
+                    "|07Enter your |15handle|07, or |11NEW|07 to sign up: ",
+                    LineOpts::text(users::HANDLE_MAX),
+                )
+                .await?;
             if handle.is_empty() {
                 continue;
             }
@@ -354,6 +368,17 @@ impl Session {
                     self.show_screen(term, &theme, &name)?;
                     term.pause().await?;
                 }
+                Action::Messages => self.message_areas(term).await?,
+                Action::NewScan => self.new_scan(term).await?,
+                Action::Mail => self.mailbox(term).await?,
+                Action::SendMail => self.send_mail(term, None).await?,
+                Action::Files => self.file_areas(term).await?,
+                Action::RescanFiles => self.rescan_files(term).await?,
+                Action::Doors => self.door_list(term).await?,
+                Action::Door(id) => self.run_door(term, &id).await?,
+                Action::SysopUsers => self.sysop_users(term).await?,
+                Action::SysopMessageAreas => self.sysop_message_areas(term).await?,
+                Action::SysopFileAreas => self.sysop_file_areas(term).await?,
                 Action::ComingSoon(what) => {
                     let text = theme
                         .screen("comingsoon")?
@@ -470,11 +495,19 @@ impl Session {
         Ok(())
     }
 
-    fn level(&self) -> i64 {
+    /// The logged-in user. Only called after login.
+    pub(crate) fn me(&self) -> (i64, String) {
+        self.user
+            .as_ref()
+            .map(|u| (u.id, u.handle.clone()))
+            .unwrap_or((0, "Guest".into()))
+    }
+
+    pub(crate) fn level(&self) -> i64 {
         self.user.as_ref().map(|u| u.access_level).unwrap_or(0)
     }
 
-    fn show_screen(&self, term: &Term, theme: &Theme, name: &str) -> Result<()> {
+    pub(crate) fn show_screen(&self, term: &Term, theme: &Theme, name: &str) -> Result<()> {
         if let Some(text) = theme.screen(name)? {
             term.print(&self.expand(&text))?;
         }
@@ -489,7 +522,7 @@ impl Session {
     }
 
     /// Fill in `@TOKENS@` such as @USER@ and @BBSNAME@.
-    fn expand(&self, text: &str) -> String {
+    pub(crate) fn expand(&self, text: &str) -> String {
         let cfg = &self.bbs.config;
         expand_tokens(text, |token| {
             Some(match token {

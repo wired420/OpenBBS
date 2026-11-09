@@ -1,17 +1,38 @@
+# Sysop actions: sysop:users, sysop:messageareas, sysop:fileareas,
+# rescanfiles, who, userlist. These check for sysop access themselves too.
 title = "Sysop Menu"
 subtitle = "Board management"
 style = "lightbar"
 prompt = "|08[|12Sysop|08] |07» |07"
 
 [[item]]
+key = "U"
+label = "Users"
+action = "sysop:users"
+level = 90
+
+[[item]]
+key = "M"
+label = "Message Areas"
+action = "sysop:messageareas"
+level = 90
+
+[[item]]
+key = "F"
+label = "File Areas"
+action = "sysop:fileareas"
+level = 90
+
+[[item]]
+key = "R"
+label = "Rescan File Folders"
+action = "rescanfiles"
+level = 90
+
+[[item]]
 key = "W"
 label = "Who's Online"
 action = "who"
-
-[[item]]
-key = "U"
-label = "User List"
-action = "userlist"
 
 [[item]]
 key = "Q"
