@@ -1159,7 +1159,7 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
 name = "openbbs"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -1177,7 +1177,7 @@ dependencies = [
 
 [[package]]
 name = "openbbs-core"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "argon2",
@@ -2472,7 +2472,7 @@ dependencies = [
 
 [[package]]
 name = "xtask"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
 ]

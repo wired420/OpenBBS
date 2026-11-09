@@ -7,6 +7,8 @@ go.
 
 ## [Unreleased]
 
+## [0.0.1] - 2026-11-09
+
 ### Added
 - Rust workspace that builds on Linux (including WSL) and Windows.
 - MIT license, README and this changelog.
@@ -72,3 +74,8 @@ go.
 - `openbbs passwd HANDLE` and `openbbs set-level HANDLE LEVEL` for fixing
   accounts from the command line, even when the sysop is locked out.
 - Command-line errors print one clear line instead of a stack trace.
+- Setup guide (`docs/SETUP.md`) for development in WSL and hosting on a
+  Linux VPS, with a systemd service (`dist/openbbs.service`), firewall,
+  backup and upgrade steps.
+- Door guide (`docs/DOORS.md`) and a DOSEMU2 launcher
+  (`dist/doors/dosemu-door.sh`) for classic DOS doors.

@@ -1,0 +1,31 @@
+# systemd unit for OpenBBS. Copy to /etc/systemd/system/openbbs.service,
+# then: systemctl daemon-reload && systemctl enable --now openbbs
+# See docs/SETUP.md.
+[Unit]
+Description=OpenBBS bulletin board system
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=openbbs
+Group=openbbs
+WorkingDirectory=/opt/openbbs
+ExecStart=/opt/openbbs/openbbs run
+Restart=on-failure
+RestartSec=5
+Environment=RUST_LOG=info
+
+# Uncomment to let OpenBBS listen on port 22 (or any port below 1024)
+# without running as root. See "Using port 22" in docs/SETUP.md.
+#AmbientCapabilities=CAP_NET_BIND_SERVICE
+
+# Hardening: OpenBBS only needs to write inside /opt/openbbs.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/openbbs
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

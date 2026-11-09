@@ -1,0 +1,48 @@
+#!/bin/sh
+# Run a DOS door game under DOSEMU2 for OpenBBS.
+#
+# Tested with DOSEMU2 2.0pre9 on Ubuntu 24.04. See docs/DOORS.md.
+#
+# doors.toml entry:
+#   [[door]]
+#   id = "lord"
+#   name = "Legend of the Red Dragon"
+#   command = "/opt/openbbs/doors/dosemu-door.sh"
+#   args = ["/opt/doors/lord", "START.BAT", "{node}", "{dropdir}"]
+#
+# Arguments:
+#   1  the door's folder on Linux (becomes a DOS drive)
+#   2  the batch file in that folder that starts the door
+#   3  node number
+#   4  folder holding DOOR.SYS and DOOR32.SYS for this node
+#
+# The batch file gets the node number as %1. The drop files are copied to
+# NODE<n>\ inside the door's folder, so from the door's folder a door reads NODE1\DOOR.SYS.
+set -eu
+
+door_dir=$(realpath "$1")
+batch=$2
+node=$3
+drop_dir=$(realpath "$4")
+
+node_dir="$door_dir/NODE$node"
+mkdir -p "$node_dir"
+# DOS programs expect CR LF line endings in drop files.
+for f in DOOR.SYS DOOR32.SYS; do
+    [ -f "$drop_dir/$f" ] && sed 's/\r*$/\r/' "$drop_dir/$f" > "$node_dir/$f"
+done
+
+# Each node gets its own DOSEMU2 home, so two callers in the same door
+# don't share a C: drive or boot log.
+export HOME="${DOSEMU_HOME_BASE:-/opt/openbbs/data/dosemu}/node$node"
+mkdir -p "$HOME"
+
+# DOSEMU2's virtual COM port needs a terminal, and OpenBBS connects doors
+# with pipes, so `script` (from util-linux) gives it a pseudo-terminal.
+# Inside DOS, COM1 is the caller: FOSSIL doors talk to them through it, and
+# the door's local screen is not shown.
+#   -t   terminal mode, no window
+#   -K   make the door's folder a DOS drive and switch to it
+#   -E   run this DOS command, then exit
+exec script -qefc "dosemu -t -quiet -I 'serial { virtual com 1 }' \
+    -K '$door_dir' -E '$batch $node' 2>/dev/null" /dev/null
