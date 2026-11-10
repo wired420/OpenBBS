@@ -18,7 +18,8 @@ go.
 - A door that fails now leaves a reason in the server log: its error output
   and exit status are logged instead of thrown away.
 - The DOSEMU2 launcher checks that `dosemu`, `script` and the door's batch
-  file exist, and says which one is missing.
+  file exist, and says which one is missing. When DOSEMU2 fails, its error
+  output and the errors from its boot log reach the server log.
 
 ## [0.0.1] - 2026-11-09
 

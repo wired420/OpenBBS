@@ -60,5 +60,16 @@ mkdir -p "$HOME"
 # shell. The openbbs service account's shell is nologin, which refuses to
 # run anything, so name a real shell.
 export SHELL=/bin/sh
-exec script -qefc "dosemu -t -quiet -I 'serial { virtual com 1 }' \
-    -K '$door_dir' -E '$batch $node' 2>/dev/null" /dev/null
+# DOSEMU2's own errors go to a log file, because inside `script` they would
+# be sent to the caller. If the door fails, the end of that log and of
+# DOSEMU2's boot log are printed to stderr, which OpenBBS logs.
+log="$HOME/dosemu-errors.log"
+status=0
+script -qefc "dosemu -t -quiet -I 'serial { virtual com 1 }' \
+    -K '$door_dir' -E '$batch $node' 2>'$log'" /dev/null || status=$?
+if [ "$status" -ne 0 ]; then
+    echo "dosemu-door.sh: DOSEMU2 exited with status $status" >&2
+    [ -s "$log" ] && tail -n 20 "$log" >&2
+    [ -f "$HOME/.dosemu/boot.log" ] && grep -iE 'error|fail|denied|kvm' "$HOME/.dosemu/boot.log" | tail -n 20 >&2
+fi
+exit "$status"
