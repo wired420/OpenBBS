@@ -8,6 +8,9 @@ go.
 ## [Unreleased]
 
 ### Added
+- Console mode for the DOSEMU2 launcher (`"console"` as its fifth
+  argument) runs DOS games made for DOORWAY or GATEWAY, which draw on the
+  screen instead of using a COM port. Dope Wars runs this way.
 - `scripts/publish-wiki.sh` publishes the README, setup guide and door guide
   to the GitHub wiki.
 - Door output wraps at 80 columns, as on a classic terminal, so DOS door art

@@ -113,6 +113,28 @@ port needs a real terminal, but OpenBBS connects doors with pipes, so the
 launcher runs DOSEMU2 under `script` to give it a pseudo-terminal. The door's
 local screen isn't sent to the caller; only what it writes to COM1 is.
 
+### Console doors (made for DOORWAY or GATEWAY)
+
+Some DOS games have no modem or FOSSIL code at all. They draw on the PC's
+screen and read its keyboard, and BBSes ran them under DOORWAY or GATEWAY
+to pass both to the caller. Dope Wars is one. Under the normal launcher
+they show a blinking cursor and nothing else.
+
+Add `"console"` as a fifth argument and set `encoding = "utf8"`:
+
+```toml
+[[door]]
+id = "dopewars"
+name = "Dope Wars"
+command = "/opt/openbbs/doors/dosemu-door.sh"
+args = ["/opt/openbbs/doors/dopewars", "OPENBBS.BAT", "{node}", "{dropdir}", "console"]
+encoding = "utf8"
+```
+
+In this mode DOSEMU2 has no COM port and sends its 80x25 screen to the
+caller, so you don't need DOORWAY. Callers see a little DOSEMU2 start-up
+text before the game clears the screen.
+
 ### Things to know
 
 - **Paths in a door's own config must be DOS paths.** Inside DOSEMU2 the
