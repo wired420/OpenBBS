@@ -53,7 +53,16 @@ impl Session {
             let list: Vec<Door> = all.into_iter().filter(|d| level >= d.level).collect();
             let rows: Vec<String> = list
                 .iter()
-                .map(|d| format!(" |15{} |08{}", fit(&escape_pipes(&d.name), 50), d.id))
+                .map(|d| {
+                    let full = d.max_callers > 0
+                        && self.bbs.door_seats.inside(&d.id).len() >= d.max_callers as usize;
+                    format!(
+                        " |15{} |08{}{}",
+                        fit(&escape_pipes(&d.name), 50),
+                        d.id,
+                        if full { " |12(in use)" } else { "" }
+                    )
+                })
                 .collect();
             let theme = self.bbs.theme();
             let picker = Picker {
@@ -95,8 +104,34 @@ impl Session {
         let Some(user) = self.user.clone() else {
             return Ok(());
         };
-        let config = &self.bbs.config;
         let node = self.node.number();
+        // Held until the door exits, including when the caller hangs up.
+        let seat = match self
+            .bbs
+            .door_seats
+            .enter(&door.id, door.max_callers, node, &user.handle)
+        {
+            Ok(seat) => seat,
+            Err(inside) => {
+                let who: Vec<String> = inside
+                    .iter()
+                    .map(|o| format!("{} (node {})", o.handle, o.node))
+                    .collect();
+                term.println(&format!(
+                    "|12{} is in use by {}. Only {} can play at a time, so try again soon.",
+                    escape_pipes(&door.name),
+                    escape_pipes(&who.join(", ")),
+                    if door.max_callers == 1 {
+                        "one caller".to_string()
+                    } else {
+                        format!("{} callers", door.max_callers)
+                    }
+                ))?;
+                term.pause().await?;
+                return Ok(());
+            }
+        };
+        let config = &self.bbs.config;
         let drop_dir = config.paths.data.join("nodes").join(format!("node{node}"));
         let info = DropInfo {
             bbs_name: config.bbs.name.clone(),
@@ -227,6 +262,8 @@ impl Session {
             ),
             _ => tracing::info!(door = door.id, user = user.handle, "door finished"),
         }
+        // Free the door for the next caller before the "press a key" pause.
+        drop(seat);
         outcome?;
         term.write("\x1b[0m\x1b[?25h\r\n")?;
         term.println(&format!(

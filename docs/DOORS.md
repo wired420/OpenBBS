@@ -140,6 +140,11 @@ local screen isn't sent to the caller; only what it writes to COM1 is.
 - **Each node gets its own DOSEMU2 home** (`data/dosemu/node<n>`), so two
   callers can play at once. Doors with a shared data file need their own
   multi-node support, as they did on a classic BBS.
+- **One caller at a time**: for a door that isn't multi-node safe (Trade
+  Wars 2002 v1.03, for one), add `max_callers = 1` to its doors.toml entry.
+  A second caller is told who is playing and to try again soon, and the
+  Door Games list marks the door "(in use)". The seat is freed when the door
+  exits or the caller hangs up. Leave it out, or set 0, for no limit.
 - **The systemd service** in `dist/openbbs.service` limits writes to
   `/opt/openbbs`. If doors live elsewhere, add their folder to
   `ReadWritePaths`.

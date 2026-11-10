@@ -2,6 +2,7 @@
 
 pub mod boards;
 pub mod doors;
+pub mod doorseats;
 pub mod editor;
 pub mod filebase;
 pub mod keys;
