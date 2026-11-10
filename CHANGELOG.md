@@ -12,6 +12,9 @@ go.
   to the GitHub wiki.
 
 ### Fixed
+- DOS doors run under the systemd service. The DOSEMU2 launcher ran DOSEMU2
+  through the `openbbs` account's login shell, which is `nologin`, so every
+  door quit as soon as it started.
 - A door that fails now leaves a reason in the server log: its error output
   and exit status are logged instead of thrown away.
 - The DOSEMU2 launcher checks that `dosemu`, `script` and the door's batch

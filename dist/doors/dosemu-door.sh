@@ -56,5 +56,9 @@ mkdir -p "$HOME"
 #   -t   terminal mode, no window
 #   -K   make the door's folder a DOS drive and switch to it
 #   -E   run this DOS command, then exit
+# `script` runs the command with $SHELL, falling back to the account's login
+# shell. The openbbs service account's shell is nologin, which refuses to
+# run anything, so name a real shell.
+export SHELL=/bin/sh
 exec script -qefc "dosemu -t -quiet -I 'serial { virtual com 1 }' \
     -K '$door_dir' -E '$batch $node' 2>/dev/null" /dev/null
