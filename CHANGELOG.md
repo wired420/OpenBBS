@@ -22,6 +22,9 @@ go.
   Games list shows "(in use)".
 
 ### Fixed
+- The door guide's command for running a door's setup program sets an
+  80x25 screen and a UTF-8 locale, so full-screen setup programs (such as
+  the Kingdoms Manager) line up over SSH.
 - A caller hanging up in a DOS door left DOSEMU2 running. OpenBBS stopped
   the launcher script but not what it started. Doors now run in their own
   process group, and the whole group is stopped when the door ends.
