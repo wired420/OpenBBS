@@ -177,7 +177,7 @@ impl Session {
                         Ok(n) => n,
                     };
                     let text = match door.encoding {
-                        Encoding::Cp437 => buf[..n].iter().map(|&b| cp437::to_char(b)).collect::<String>(),
+                        Encoding::Cp437 => cp437::program_output(&buf[..n]),
                         Encoding::Utf8 => {
                             utf8_carry.extend_from_slice(&buf[..n]);
                             let valid = match std::str::from_utf8(&utf8_carry) {
