@@ -93,8 +93,11 @@ if [ "$mode" = console ]; then
     # The caller sees the DOS screen and types on the DOS keyboard. No COM
     # port: with one, or with -quiet, DOSEMU2 turns its screen output off.
     # The pseudo-terminal starts at 0x0, so give DOS its 80x25 screen.
-    # DOSEMU2 draws box characters as UTF-8.
-    export LANG=C.UTF-8 DOSEMU_QUIET=1
+    # DOSEMU2 draws box characters as UTF-8. It also needs a terminal type
+    # to draw the screen at all, and the systemd service sets none (with no
+    # TERM, callers see the start-up text and then a blank screen). Callers
+    # come in over SSH, so xterm fits.
+    export LANG=C.UTF-8 DOSEMU_QUIET=1 TERM=xterm
     script -qefc "stty rows 25 cols 80; dosemu -t \
         -K '$door_dir' -E '$batch $node' 2>'$log'" /dev/null || status=$?
 else
