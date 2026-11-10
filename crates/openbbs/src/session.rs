@@ -9,6 +9,7 @@ use openbbs_core::config::Config;
 use openbbs_core::text::expand_tokens;
 use openbbs_core::users::{self, NewUser, User};
 
+use crate::doorseats::DoorSeats;
 use crate::menu::{Action, Menu, MenuRunner};
 use crate::nodes::{NodeGuard, Nodes};
 use crate::store::{Store, blocking};
@@ -20,6 +21,7 @@ pub struct Bbs {
     pub config: Config,
     pub store: Store,
     pub nodes: Nodes,
+    pub door_seats: DoorSeats,
 }
 
 impl Bbs {
@@ -29,6 +31,7 @@ impl Bbs {
             config,
             store,
             nodes,
+            door_seats: DoorSeats::new(),
         })
     }
 

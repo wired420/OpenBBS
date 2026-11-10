@@ -13,6 +13,10 @@ go.
 - Door output wraps at 80 columns, as on a classic terminal, so DOS door art
   lines up in wider windows. Set `columns` per door in doors.toml (0 turns
   it off). On by default for CP437 doors.
+- `max_callers` in doors.toml limits how many callers can be in a door at
+  once. Set `max_callers = 1` for doors that only handle one player at a
+  time. Callers who find it full are told who is playing, and the Door
+  Games list shows "(in use)".
 
 ### Fixed
 - Doors that clear the screen with a form feed (byte 12) now clear it,

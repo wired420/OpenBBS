@@ -33,6 +33,9 @@ pub const EXAMPLE_DOORS_TOML: &str = r#"# Door games. Each [[door]] adds a door 
 # columns   screen width the door draws for; its output wraps there so it
 #           looks right in wider windows (default 80 for cp437 doors, off
 #           for utf8; 0 turns it off)
+# max_callers  how many callers can be in the door at once (default 0, no
+#           limit). Set 1 for doors that only handle one player at a time,
+#           such as older single-node games.
 #
 # Example (remove the # signs and point it at a real door):
 #
@@ -73,6 +76,10 @@ pub struct Door {
     /// Defaults to 80 for CP437 doors and off for UTF-8 doors.
     #[serde(default)]
     pub columns: Option<usize>,
+    /// How many callers can be in the door at the same time. 0 means no
+    /// limit. Older doors that aren't multi-node safe need 1.
+    #[serde(default)]
+    pub max_callers: u32,
 }
 
 impl Door {
@@ -310,6 +317,9 @@ mod tests {
                 .unwrap();
         assert_eq!(doors[0].level, 10);
         assert_eq!(doors[0].encoding, Encoding::Cp437);
+        assert_eq!(doors[0].max_callers, 0);
+        let doors = parse("[[door]]\nid='tw'\nname='TW'\ncommand='y'\nmax_callers=1\n").unwrap();
+        assert_eq!(doors[0].max_callers, 1);
         assert!(parse("[[door]]\nid='a b'\nname='x'\ncommand='y'\n").is_err());
         assert!(
             parse(
