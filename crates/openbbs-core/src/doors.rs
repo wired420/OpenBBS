@@ -225,8 +225,12 @@ pub fn door_sys(info: &DropInfo) -> String {
 
 /// Write both drop files into `dir` (created if needed). Returns their paths
 /// as (DOOR32.SYS, DOOR.SYS).
+/// Writes both drop files into `dir` and returns their absolute paths.
 pub fn write_drop_files(dir: &Path, info: &DropInfo) -> Result<(PathBuf, PathBuf)> {
     fs::create_dir_all(dir).with_context(|| format!("creating {}", dir.display()))?;
+    // Doors can run in their own folder (`dir` in doors.toml), so the paths
+    // handed to them must not depend on OpenBBS's working directory.
+    let dir = &std::path::absolute(dir)?;
     let door32 = dir.join("DOOR32.SYS");
     let doorsys = dir.join("DOOR.SYS");
     fs::write(&door32, door32_sys(info))?;
@@ -293,5 +297,15 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn drop_file_paths_are_absolute() {
+        // A relative folder, as config.paths.data usually is.
+        let rel = PathBuf::from(format!("target/drop-test-{}", std::process::id()));
+        let (door32, doorsys) = write_drop_files(&rel, &info()).unwrap();
+        assert!(door32.is_absolute() && doorsys.is_absolute());
+        assert!(door32.exists() && doorsys.exists());
+        fs::remove_dir_all(&rel).unwrap();
     }
 }

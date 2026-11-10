@@ -12,6 +12,8 @@ go.
   to the GitHub wiki.
 
 ### Fixed
+- Doors with `dir` set in doors.toml quit at once: `{dropdir}`, `{door32}`
+  and `{doorsys}` were relative to OpenBBS's folder. They are now full paths.
 - The DOSEMU2 launcher tells DOS doors the caller is on COM1. DOOR.SYS said
   `COM0:` (local, no caller), so doors such as LORD started in local mode
   and quit.

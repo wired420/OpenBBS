@@ -2,6 +2,7 @@
 //! terminal through to the door's standard input and output.
 
 use std::collections::HashMap;
+use std::path::Path;
 use std::process::Stdio;
 use std::time::Duration;
 
@@ -111,6 +112,7 @@ impl Session {
             rows: term.size().1,
         };
         let (door32, doorsys) = doors::write_drop_files(&drop_dir, &info)?;
+        let drop_dir = door32.parent().map(Path::to_path_buf).unwrap_or(drop_dir);
         let values: HashMap<&str, String> = HashMap::from([
             ("node", node.to_string()),
             ("dropdir", drop_dir.display().to_string()),
