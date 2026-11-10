@@ -11,6 +11,12 @@ go.
 - `scripts/publish-wiki.sh` publishes the README, setup guide and door guide
   to the GitHub wiki.
 
+### Fixed
+- A door that fails now leaves a reason in the server log: its error output
+  and exit status are logged instead of thrown away.
+- The DOSEMU2 launcher checks that `dosemu`, `script` and the door's batch
+  file exist, and says which one is missing.
+
 ## [0.0.1] - 2026-11-09
 
 ### Added

@@ -20,6 +20,18 @@
 # NODE<n>\ inside the door's folder, so from the door's folder a door reads NODE1\DOOR.SYS.
 set -eu
 
+# Errors printed here end up in the OpenBBS log (journalctl -u openbbs).
+for tool in dosemu script realpath; do
+    if ! command -v "$tool" >/dev/null 2>&1; then
+        echo "dosemu-door.sh: '$tool' is not installed or not on PATH" >&2
+        exit 1
+    fi
+done
+if [ ! -f "$1/$2" ]; then
+    echo "dosemu-door.sh: $1/$2 not found (check the door's args)" >&2
+    exit 1
+fi
+
 door_dir=$(realpath "$1")
 batch=$2
 node=$3
