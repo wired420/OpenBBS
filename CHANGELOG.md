@@ -15,6 +15,8 @@ go.
   it off). On by default for CP437 doors.
 
 ### Fixed
+- The setup guide builds the server with `cargo build --release`.
+  `cargo xtask build` there bumped the version locally and blocked `git pull`.
 - Doors with `dir` set in doors.toml quit at once: `{dropdir}`, `{door32}`
   and `{doorsys}` were relative to OpenBBS's folder. They are now full paths.
 - The DOSEMU2 launcher tells DOS doors the caller is on COM1. DOOR.SYS said
