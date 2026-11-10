@@ -2,19 +2,24 @@
 //! terminal through to the door's standard input and output.
 
 use std::collections::HashMap;
+use std::path::Path;
 use std::process::Stdio;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
+use openbbs_core::colwrap::ColumnWrap;
 use openbbs_core::doors::{self, Door, DropInfo, Encoding};
 use openbbs_core::text::escape_pipes;
 use openbbs_core::{VERSION, cp437};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::Command;
 
 use crate::picker::{Pick, Picker, fit};
 use crate::session::Session;
 use crate::term::{Hangup, Term};
+
+/// Most lines of a door's stderr written to the log per run.
+const MAX_STDERR_LINES: usize = 50;
 
 /// Replace `{name}` placeholders.
 fn fill(template: &str, values: &HashMap<&str, String>) -> String {
@@ -108,6 +113,7 @@ impl Session {
             rows: term.size().1,
         };
         let (door32, doorsys) = doors::write_drop_files(&drop_dir, &info)?;
+        let drop_dir = door32.parent().map(Path::to_path_buf).unwrap_or(drop_dir);
         let values: HashMap<&str, String> = HashMap::from([
             ("node", node.to_string()),
             ("dropdir", drop_dir.display().to_string()),
@@ -121,7 +127,7 @@ impl Session {
             .args(door.args.iter().map(|a| fill(a, &values)))
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::null())
+            .stderr(Stdio::piped())
             .kill_on_drop(true);
         if let Some(dir) = &door.dir {
             command.current_dir(fill(dir, &values));
@@ -144,8 +150,25 @@ impl Session {
         };
         let mut stdin = child.stdin.take().context("door stdin")?;
         let mut stdout = child.stdout.take().context("door stdout")?;
+        // Anything the door prints to stderr goes to the server log, so a door
+        // that fails to start leaves a reason behind. Capped so a chatty door
+        // can't flood the log.
+        if let Some(stderr) = child.stderr.take() {
+            let id = door.id.clone();
+            tokio::spawn(async move {
+                let mut lines = BufReader::new(stderr).lines();
+                let mut logged = 0;
+                while let Ok(Some(line)) = lines.next_line().await {
+                    if logged < MAX_STDERR_LINES && !line.trim().is_empty() {
+                        tracing::warn!(door = id, "door stderr: {}", line.trim_end());
+                        logged += 1;
+                    }
+                }
+            });
+        }
         let mut buf = vec![0u8; 8192];
         let mut utf8_carry: Vec<u8> = Vec::new();
+        let mut wrap = door.wrap_columns().map(ColumnWrap::new);
         let outcome: Result<(), Hangup> = loop {
             tokio::select! {
                 read = stdout.read(&mut buf) => {
@@ -167,6 +190,10 @@ impl Session {
                             text
                         }
                     };
+                    let text = match wrap.as_mut() {
+                        Some(wrap) => wrap.process(&text),
+                        None => text,
+                    };
                     if let Err(e) = term.write_raw(text.into_bytes()) {
                         break Err(e);
                     }
@@ -185,13 +212,21 @@ impl Session {
         };
         drop(stdin);
         // Give the door a moment to exit on its own, then make sure it's gone.
-        if tokio::time::timeout(Duration::from_secs(3), child.wait())
-            .await
-            .is_err()
-        {
-            let _ = child.kill().await;
+        let status = match tokio::time::timeout(Duration::from_secs(3), child.wait()).await {
+            Ok(status) => status.ok(),
+            Err(_) => {
+                let _ = child.kill().await;
+                None
+            }
+        };
+        match status {
+            Some(status) if !status.success() => tracing::warn!(
+                door = door.id,
+                user = user.handle,
+                "door finished with an error ({status})"
+            ),
+            _ => tracing::info!(door = door.id, user = user.handle, "door finished"),
         }
-        tracing::info!(door = door.id, user = user.handle, "door finished");
         outcome?;
         term.write("\x1b[0m\x1b[?25h\r\n")?;
         term.println(&format!(

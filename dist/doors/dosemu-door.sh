@@ -20,6 +20,18 @@
 # NODE<n>\ inside the door's folder, so from the door's folder a door reads NODE1\DOOR.SYS.
 set -eu
 
+# Errors printed here end up in the OpenBBS log (journalctl -u openbbs).
+for tool in dosemu script realpath; do
+    if ! command -v "$tool" >/dev/null 2>&1; then
+        echo "dosemu-door.sh: '$tool' is not installed or not on PATH" >&2
+        exit 1
+    fi
+done
+if [ ! -f "$1/$2" ]; then
+    echo "dosemu-door.sh: $1/$2 not found (check the door's args)" >&2
+    exit 1
+fi
+
 door_dir=$(realpath "$1")
 batch=$2
 node=$3
@@ -27,15 +39,27 @@ drop_dir=$(realpath "$4")
 
 node_dir="$door_dir/NODE$node"
 mkdir -p "$node_dir"
-# DOS programs expect CR LF line endings in drop files.
-for f in DOOR.SYS DOOR32.SYS; do
-    [ -f "$drop_dir/$f" ] && sed 's/\r*$/\r/' "$drop_dir/$f" > "$node_dir/$f"
-done
+# OpenBBS writes drop files for doors that use standard input and output
+# (DOOR.SYS says COM0:, which doors read as "local, no caller"). Under
+# DOSEMU2 the caller is on COM1, so say so. DOS programs also expect CR LF
+# line endings.
+if [ -f "$drop_dir/DOOR.SYS" ]; then
+    sed -e '1s/.*/COM1:/' -e 's/\r*$/\r/' "$drop_dir/DOOR.SYS" > "$node_dir/DOOR.SYS"
+fi
+if [ -f "$drop_dir/DOOR32.SYS" ]; then
+    # Line 1: comm type 1 (serial). Line 2: port handle 0 (COM1).
+    sed -e '1s/.*/1/' -e '2s/.*/0/' -e 's/\r*$/\r/' "$drop_dir/DOOR32.SYS" > "$node_dir/DOOR32.SYS"
+fi
 
 # Each node gets its own DOSEMU2 home, so two callers in the same door
 # don't share a C: drive or boot log.
 export HOME="${DOSEMU_HOME_BASE:-/opt/openbbs/data/dosemu}/node$node"
-mkdir -p "$HOME"
+mkdir -p "$HOME/.dosemu"
+# Newer DOSEMU2 builds complain when this config file is missing. COM1 is
+# set up with -I below; setting it here as well makes DOSEMU2 refuse to
+# start ("conflicting devices"), so the file stays empty.
+: > "$HOME/.dosemu/dosemurc"
+rm -f "$HOME/.dosemu/.dosemurc"
 
 # DOSEMU2's virtual COM port needs a terminal, and OpenBBS connects doors
 # with pipes, so `script` (from util-linux) gives it a pseudo-terminal.
@@ -44,5 +68,20 @@ mkdir -p "$HOME"
 #   -t   terminal mode, no window
 #   -K   make the door's folder a DOS drive and switch to it
 #   -E   run this DOS command, then exit
-exec script -qefc "dosemu -t -quiet -I 'serial { virtual com 1 }' \
-    -K '$door_dir' -E '$batch $node' 2>/dev/null" /dev/null
+# `script` runs the command with $SHELL, falling back to the account's login
+# shell. The openbbs service account's shell is nologin, which refuses to
+# run anything, so name a real shell.
+export SHELL=/bin/sh
+# DOSEMU2's own errors go to a log file, because inside `script` they would
+# be sent to the caller. If the door fails, the end of that log and of
+# DOSEMU2's boot log are printed to stderr, which OpenBBS logs.
+log="$HOME/dosemu-errors.log"
+status=0
+script -qefc "dosemu -t -quiet -I 'serial { virtual com 1 }' \
+    -K '$door_dir' -E '$batch $node' 2>'$log'" /dev/null || status=$?
+if [ "$status" -ne 0 ]; then
+    echo "dosemu-door.sh: DOSEMU2 exited with status $status" >&2
+    [ -s "$log" ] && tail -n 20 "$log" >&2
+    [ -f "$HOME/.dosemu/boot.log" ] && grep -iE 'error|fail|denied|kvm' "$HOME/.dosemu/boot.log" | tail -n 20 >&2
+fi
+exit "$status"

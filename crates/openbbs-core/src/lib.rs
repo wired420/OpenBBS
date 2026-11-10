@@ -1,5 +1,6 @@
 //! Core library for OpenBBS: configuration, storage and shared types.
 
+pub mod colwrap;
 pub mod config;
 pub mod cp437;
 pub mod db;

@@ -10,6 +10,24 @@ go.
 ### Added
 - `scripts/publish-wiki.sh` publishes the README, setup guide and door guide
   to the GitHub wiki.
+- Door output wraps at 80 columns, as on a classic terminal, so DOS door art
+  lines up in wider windows. Set `columns` per door in doors.toml (0 turns
+  it off). On by default for CP437 doors.
+
+### Fixed
+- Doors with `dir` set in doors.toml quit at once: `{dropdir}`, `{door32}`
+  and `{doorsys}` were relative to OpenBBS's folder. They are now full paths.
+- The DOSEMU2 launcher tells DOS doors the caller is on COM1. DOOR.SYS said
+  `COM0:` (local, no caller), so doors such as LORD started in local mode
+  and quit.
+- DOS doors run under the systemd service. The DOSEMU2 launcher ran DOSEMU2
+  through the `openbbs` account's login shell, which is `nologin`, so every
+  door quit as soon as it started.
+- A door that fails now leaves a reason in the server log: its error output
+  and exit status are logged instead of thrown away.
+- The DOSEMU2 launcher checks that `dosemu`, `script` and the door's batch
+  file exist, and says which one is missing. When DOSEMU2 fails, its error
+  output and the errors from its boot log reach the server log.
 
 ## [0.0.1] - 2026-11-09
 
