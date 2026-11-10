@@ -91,9 +91,15 @@ distro.
    same way the BBS runs it so the DOS drive letters match:
 
    ```sh
-   sudo -u openbbs HOME=/opt/openbbs/data/dosemu/node1 \
-       dosemu -t -K /opt/openbbs/doors/lord -E 'LORDCFG.EXE'
+   sudo -u openbbs env HOME=/opt/openbbs/data/dosemu/node1 TERM=xterm \
+       LANG=C.UTF-8 sh -c "stty rows 25 cols 80; \
+       dosemu -t -K /opt/openbbs/doors/lord -E 'LORDCFG.EXE'"
    ```
+
+   DOS screens are 80x25, so `stty` sets that size and `LANG` lets the box
+   lines draw. Keep the window at least that big, and resize it (or run
+   `reset`) afterwards to get your own size back. Without these, full-screen
+   setup programs come out jumbled.
 
    For node N, point the door at `NODE<N>\DOOR.SYS` (or `DOOR32.SYS`) and
    set communications to FOSSIL on COM1.
