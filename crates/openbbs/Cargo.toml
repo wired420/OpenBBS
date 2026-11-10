@@ -20,3 +20,6 @@ toml.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 russh-sftp = "3.0.1"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

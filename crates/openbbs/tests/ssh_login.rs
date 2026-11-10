@@ -532,6 +532,74 @@ level = 99
     let _ = std::fs::remove_dir_all(&base);
 }
 
+#[cfg(unix)]
+#[tokio::test]
+async fn hanging_up_stops_everything_the_door_started() {
+    let base = std::env::temp_dir().join(format!("openbbs-door-hangup-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    let doors = base.join("doors");
+    std::fs::create_dir_all(&doors).unwrap();
+    // Like a launcher script running DOSEMU2: the door starts a child of its
+    // own that doesn't stop when the caller leaves.
+    std::fs::write(
+        doors.join("doors.toml"),
+        r#"
+[[door]]
+id = "launcher"
+name = "Launcher Door"
+command = "sh"
+args = ["-c", "sleep 300 & echo $! > {dropdir}/child.pid; echo ready; wait"]
+"#,
+    )
+    .unwrap();
+    let (data, doors_dir) = (base.join("data"), doors.clone());
+    let addr = start_board_with(move |c| {
+        c.paths.doors = doors_dir;
+        c.paths.data = data;
+    })
+    .await;
+    sign_up(addr, "First Sysop", "hunter42").await;
+
+    let c = Caller::connect_with(addr, "First Sysop", Some("hunter42")).await;
+    c.expect("Press any key").await;
+    c.send(" ").await;
+    c.expect("Main »").await;
+    c.send("d").await;
+    c.expect("Launcher Door").await;
+    c.send("\r").await;
+    c.expect("ready").await;
+    let pid = std::fs::read_to_string(base.join("data/nodes/node1/child.pid")).unwrap();
+    let pid = pid.trim().to_string();
+    let alive = |pid: &str| {
+        std::process::Command::new("kill")
+            .args(["-0", pid])
+            .stderr(std::process::Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
+    };
+    assert!(alive(&pid), "the door's child is running");
+    drop(c);
+    let mut gone = false;
+    for _ in 0..60 {
+        tokio::time::sleep(Duration::from_millis(250)).await;
+        if !alive(&pid) {
+            gone = true;
+            break;
+        }
+    }
+    if !gone {
+        let _ = std::process::Command::new("kill")
+            .args(["-9", &pid])
+            .status();
+    }
+    let _ = std::fs::remove_dir_all(&base);
+    assert!(
+        gone,
+        "the door's child was left running after the caller hung up"
+    );
+}
+
 #[tokio::test]
 async fn sysop_console_manages_areas_and_users() {
     let addr = start_board().await;
