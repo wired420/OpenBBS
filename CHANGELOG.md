@@ -22,6 +22,9 @@ go.
   Games list shows "(in use)".
 
 ### Fixed
+- A caller hanging up in a DOS door left DOSEMU2 running. OpenBBS stopped
+  the launcher script but not what it started. Doors now run in their own
+  process group, and the whole group is stopped when the door ends.
 - Console-mode DOS doors showed a blank screen under the systemd service,
   which sets no terminal type. The launcher now sets `TERM=xterm` for them.
 - Doors that clear the screen with a form feed (byte 12) now clear it,

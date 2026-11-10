@@ -30,6 +30,42 @@ fn fill(template: &str, values: &HashMap<&str, String>) -> String {
     out
 }
 
+#[derive(Clone, Copy)]
+enum Signal {
+    Term,
+    Kill,
+}
+
+/// A running door's process group. Dropping it kills whatever is left in
+/// the group.
+#[cfg_attr(not(unix), allow(dead_code))]
+struct DoorGroup(Option<u32>);
+
+impl DoorGroup {
+    fn signal(&self, signal: Signal) {
+        #[cfg(unix)]
+        if let Some(pid) = self.0.and_then(|p| libc::pid_t::try_from(p).ok()) {
+            let sig = match signal {
+                Signal::Term => libc::SIGTERM,
+                Signal::Kill => libc::SIGKILL,
+            };
+            // SAFETY: killpg only sends a signal. The group is the door's
+            // own (set with process_group(0) at spawn), so nothing else is hit.
+            unsafe {
+                libc::killpg(pid, sig);
+            }
+        }
+        #[cfg(not(unix))]
+        let _ = signal;
+    }
+}
+
+impl Drop for DoorGroup {
+    fn drop(&mut self) {
+        self.signal(Signal::Kill);
+    }
+}
+
 impl Session {
     fn load_doors(&self) -> Result<Vec<Door>> {
         doors::load(&self.bbs.config.paths.doors)
@@ -167,6 +203,10 @@ impl Session {
         if let Some(dir) = &door.dir {
             command.current_dir(fill(dir, &values));
         }
+        // The door gets its own process group, so everything it starts (a
+        // launcher script, `script`, DOSEMU2) can be stopped together.
+        #[cfg(unix)]
+        command.process_group(0);
 
         self.node.set_activity(&format!("Playing {}", door.name));
         tracing::info!(door = door.id, user = user.handle, node, "door started");
@@ -183,6 +223,8 @@ impl Session {
                 return Ok(());
             }
         };
+        // Stops anything the door left running, however this function ends.
+        let group = DoorGroup(child.id());
         let mut stdin = child.stdin.take().context("door stdin")?;
         let mut stdout = child.stdout.take().context("door stdout")?;
         // Anything the door prints to stderr goes to the server log, so a door
@@ -246,14 +288,24 @@ impl Session {
             }
         };
         drop(stdin);
-        // Give the door a moment to exit on its own, then make sure it's gone.
+        // Give the door a moment to exit on its own. If it hasn't (the caller
+        // hung up mid-game, say), ask its whole process group to quit, then
+        // force it. Killing only the program OpenBBS started isn't enough:
+        // a launcher's children, such as DOSEMU2, would keep running.
         let status = match tokio::time::timeout(Duration::from_secs(3), child.wait()).await {
             Ok(status) => status.ok(),
             Err(_) => {
-                let _ = child.kill().await;
-                None
+                group.signal(Signal::Term);
+                match tokio::time::timeout(Duration::from_secs(3), child.wait()).await {
+                    Ok(status) => status.ok(),
+                    Err(_) => {
+                        let _ = child.kill().await;
+                        None
+                    }
+                }
             }
         };
+        drop(group);
         match status {
             Some(status) if !status.success() => tracing::warn!(
                 door = door.id,
