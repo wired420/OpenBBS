@@ -41,6 +41,22 @@ pub fn to_char(byte: u8) -> char {
     }
 }
 
+/// Converts output from a running CP437 program (a door) for a modern
+/// terminal. Unlike art files, programs use some control bytes as controls:
+/// bell and backspace pass through, and form feed, the DOS way to clear the
+/// screen, becomes an ANSI clear and home.
+pub fn program_output(bytes: &[u8]) -> String {
+    let mut out = String::with_capacity(bytes.len());
+    for &b in bytes {
+        match b {
+            0x07 | 0x08 => out.push(b as char),
+            0x0C => out.push_str("\x1b[2J\x1b[H"),
+            _ => out.push(to_char(b)),
+        }
+    }
+    out
+}
+
 /// Convert CP437 text (for example a `.ans` file) to a UTF-8 string. Stops at
 /// the DOS end-of-file marker (0x1A), which also drops any SAUCE metadata record.
 pub fn decode(bytes: &[u8]) -> String {
@@ -83,5 +99,11 @@ mod tests {
     fn utf8_screens_pass_through() {
         assert_eq!(decode_screen("╔═╗".as_bytes()), "╔═╗");
         assert_eq!(decode_screen(&[0xC9, 0xCD, 0xBB]), "╔═╗");
+    }
+
+    #[test]
+    fn program_output_handles_controls() {
+        assert_eq!(program_output(b"\x0cHi\x07\x08"), "\x1b[2J\x1b[HHi\x07\x08");
+        assert_eq!(program_output(&[0xDB, 0x01]), "\u{2588}\u{263A}");
     }
 }

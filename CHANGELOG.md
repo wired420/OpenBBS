@@ -15,6 +15,8 @@ go.
   it off). On by default for CP437 doors.
 
 ### Fixed
+- Doors that clear the screen with a form feed (byte 12) now clear it,
+  instead of showing a ♀ character. Bell and backspace also pass through.
 - The setup guide builds the server with `cargo build --release`.
   `cargo xtask build` there bumped the version locally and blocked `git pull`.
 - Doors with `dir` set in doors.toml quit at once: `{dropdir}`, `{door32}`
