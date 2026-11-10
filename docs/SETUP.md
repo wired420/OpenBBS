@@ -62,8 +62,12 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source ~/.cargo/env
 git clone https://github.com/wired420/OpenBBS.git
 cd OpenBBS
-cargo xtask build              # release build; bumps the patch version
+cargo build --release
 ```
+
+Use plain `cargo build --release` on the server. `cargo xtask build` is for
+development: it bumps the version and edits CHANGELOG.md and Cargo.toml,
+which would then block `git pull` on the server.
 
 The program is now at `target/release/openbbs`.
 
@@ -164,7 +168,7 @@ the board is stopped, or use `sqlite3 data/openbbs.db ".backup backup.db"`.
 ```sh
 cd ~/OpenBBS
 git pull
-cargo xtask build
+cargo build --release
 sudo systemctl stop openbbs
 sudo cp target/release/openbbs /opt/openbbs/
 sudo systemctl start openbbs
