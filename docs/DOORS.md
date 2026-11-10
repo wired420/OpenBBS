@@ -87,9 +87,24 @@ distro.
    minutes = 30
    ```
 
-5. Run the door once from the sysop's own login, and set it up with the
-   door's own config program if it has one (run that locally with
-   `dosemu` in the door's folder).
+5. Configure the door for each node with its own setup program, run the
+   same way the BBS runs it so the DOS drive letters match:
+
+   ```sh
+   sudo -u openbbs HOME=/opt/openbbs/data/dosemu/node1 \
+       dosemu -t -K /opt/openbbs/doors/lord -E 'LORDCFG.EXE'
+   ```
+
+   For node N, point the door at `NODE<N>\DOOR.SYS` (or `DOOR32.SYS`) and
+   set communications to FOSSIL on COM1.
+
+   Watch out for node 0: many doors (LORD among them) treat it as local
+   play, so a door that works when you start it by hand can still quit at
+   once for callers if node 1 and up aren't configured.
+6. If a door quits straight away, its complaint is on its local screen,
+   which callers never see. Run the command above with your batch file
+   instead of the setup program, add `pause` as the batch file's last line,
+   and read the message.
 
 ### How it works
 
@@ -99,6 +114,10 @@ launcher runs DOSEMU2 under `script` to give it a pseudo-terminal. The door's
 local screen isn't sent to the caller; only what it writes to COM1 is.
 
 ### Things to know
+
+- **Give DOSEMU2 KVM access** with `sudo usermod -aG kvm openbbs`, then
+  restart the service. Without it DOSEMU2 emulates the CPU, which is much
+  slower.
 
 - **Run OpenBBS as a normal user.** When DOSEMU2 runs as root it prints a
   warning that callers would see.
