@@ -15,6 +15,10 @@
 #   2  the batch file in that folder that starts the door
 #   3  node number
 #   4  folder holding DOOR.SYS and DOOR32.SYS for this node
+#   5  optional: "console" for plain DOS programs that draw on the screen
+#      and read the keyboard instead of using a COM port or FOSSIL (games
+#      made for DOORWAY or GATEWAY, such as Dope Wars). Set
+#      encoding = "utf8" on these doors in doors.toml.
 #
 # The batch file gets the node number as %1. The drop files are copied to
 # NODE<n>\ inside the door's folder, so from the door's folder a door reads NODE1\DOOR.SYS.
@@ -36,6 +40,14 @@ door_dir=$(realpath "$1")
 batch=$2
 node=$3
 drop_dir=$(realpath "$4")
+mode=${5:-com}
+case "$mode" in
+    com | console) ;;
+    *)
+        echo "dosemu-door.sh: unknown mode '$mode' (use console or leave it out)" >&2
+        exit 1
+        ;;
+esac
 
 node_dir="$door_dir/NODE$node"
 mkdir -p "$node_dir"
@@ -77,8 +89,18 @@ export SHELL=/bin/sh
 # DOSEMU2's boot log are printed to stderr, which OpenBBS logs.
 log="$HOME/dosemu-errors.log"
 status=0
-script -qefc "dosemu -t -quiet -I 'serial { virtual com 1 }' \
-    -K '$door_dir' -E '$batch $node' 2>'$log'" /dev/null || status=$?
+if [ "$mode" = console ]; then
+    # The caller sees the DOS screen and types on the DOS keyboard. No COM
+    # port: with one, or with -quiet, DOSEMU2 turns its screen output off.
+    # The pseudo-terminal starts at 0x0, so give DOS its 80x25 screen.
+    # DOSEMU2 draws box characters as UTF-8.
+    export LANG=C.UTF-8 DOSEMU_QUIET=1
+    script -qefc "stty rows 25 cols 80; dosemu -t \
+        -K '$door_dir' -E '$batch $node' 2>'$log'" /dev/null || status=$?
+else
+    script -qefc "dosemu -t -quiet -I 'serial { virtual com 1 }' \
+        -K '$door_dir' -E '$batch $node' 2>'$log'" /dev/null || status=$?
+fi
 if [ "$status" -ne 0 ]; then
     echo "dosemu-door.sh: DOSEMU2 exited with status $status" >&2
     [ -s "$log" ] && tail -n 20 "$log" >&2
