@@ -22,6 +22,8 @@ go.
   Games list shows "(in use)".
 
 ### Fixed
+- Console-mode DOS doors showed a blank screen under the systemd service,
+  which sets no terminal type. The launcher now sets `TERM=xterm` for them.
 - Doors that clear the screen with a form feed (byte 12) now clear it,
   instead of showing a ♀ character. Bell and backspace also pass through.
 - The setup guide builds the server with `cargo build --release`.
