@@ -39,10 +39,17 @@ drop_dir=$(realpath "$4")
 
 node_dir="$door_dir/NODE$node"
 mkdir -p "$node_dir"
-# DOS programs expect CR LF line endings in drop files.
-for f in DOOR.SYS DOOR32.SYS; do
-    [ -f "$drop_dir/$f" ] && sed 's/\r*$/\r/' "$drop_dir/$f" > "$node_dir/$f"
-done
+# OpenBBS writes drop files for doors that use standard input and output
+# (DOOR.SYS says COM0:, which doors read as "local, no caller"). Under
+# DOSEMU2 the caller is on COM1, so say so. DOS programs also expect CR LF
+# line endings.
+if [ -f "$drop_dir/DOOR.SYS" ]; then
+    sed -e '1s/.*/COM1:/' -e 's/\r*$/\r/' "$drop_dir/DOOR.SYS" > "$node_dir/DOOR.SYS"
+fi
+if [ -f "$drop_dir/DOOR32.SYS" ]; then
+    # Line 1: comm type 1 (serial). Line 2: port handle 0 (COM1).
+    sed -e '1s/.*/1/' -e '2s/.*/0/' -e 's/\r*$/\r/' "$drop_dir/DOOR32.SYS" > "$node_dir/DOOR32.SYS"
+fi
 
 # Each node gets its own DOSEMU2 home, so two callers in the same door
 # don't share a C: drive or boot log.

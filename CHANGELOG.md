@@ -12,6 +12,9 @@ go.
   to the GitHub wiki.
 
 ### Fixed
+- The DOSEMU2 launcher tells DOS doors the caller is on COM1. DOOR.SYS said
+  `COM0:` (local, no caller), so doors such as LORD started in local mode
+  and quit.
 - DOS doors run under the systemd service. The DOSEMU2 launcher ran DOSEMU2
   through the `openbbs` account's login shell, which is `nologin`, so every
   door quit as soon as it started.
