@@ -55,10 +55,11 @@ fi
 # don't share a C: drive or boot log.
 export HOME="${DOSEMU_HOME_BASE:-/opt/openbbs/data/dosemu}/node$node"
 mkdir -p "$HOME/.dosemu"
-# Connect COM1 to the caller. This is also passed with -I below; setting it
-# here too covers DOSEMU2 builds that handle -I differently. Without a COM
-# port, DOSEMU2's FOSSIL driver says "disabled in config".
-printf '$_com1 = "virtual"\n' > "$HOME/.dosemu/.dosemurc"
+# Newer DOSEMU2 builds complain when this config file is missing. COM1 is
+# set up with -I below; setting it here as well makes DOSEMU2 refuse to
+# start ("conflicting devices"), so the file stays empty.
+: > "$HOME/.dosemu/dosemurc"
+rm -f "$HOME/.dosemu/.dosemurc"
 
 # DOSEMU2's virtual COM port needs a terminal, and OpenBBS connects doors
 # with pipes, so `script` (from util-linux) gives it a pseudo-terminal.
