@@ -30,6 +30,9 @@ pub const EXAMPLE_DOORS_TOML: &str = r#"# Door games. Each [[door]] adds a door 
 # level     minimum access level (default 10)
 # minutes   time the door is told the caller has (default 60)
 # encoding  "cp437" (classic DOS doors, the default) or "utf8"
+# columns   screen width the door draws for; its output wraps there so it
+#           looks right in wider windows (default 80 for cp437 doors, off
+#           for utf8; 0 turns it off)
 #
 # Example (remove the # signs and point it at a real door):
 #
@@ -65,6 +68,23 @@ pub struct Door {
     pub minutes: u32,
     #[serde(default)]
     pub encoding: Encoding,
+    /// Screen width the door draws for. Output is wrapped at this column so
+    /// callers with wider windows see the art as intended. 0 turns it off.
+    /// Defaults to 80 for CP437 doors and off for UTF-8 doors.
+    #[serde(default)]
+    pub columns: Option<usize>,
+}
+
+impl Door {
+    /// The width to wrap this door's output at, if any.
+    pub fn wrap_columns(&self) -> Option<usize> {
+        match (self.columns, self.encoding) {
+            (Some(0), _) => None,
+            (Some(n), _) => Some(n),
+            (None, Encoding::Cp437) => Some(80),
+            (None, Encoding::Utf8) => None,
+        }
+    }
 }
 
 fn default_level() -> i64 {

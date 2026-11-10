@@ -10,6 +10,9 @@ go.
 ### Added
 - `scripts/publish-wiki.sh` publishes the README, setup guide and door guide
   to the GitHub wiki.
+- Door output wraps at 80 columns, as on a classic terminal, so DOS door art
+  lines up in wider windows. Set `columns` per door in doors.toml (0 turns
+  it off). On by default for CP437 doors.
 
 ### Fixed
 - Doors with `dir` set in doors.toml quit at once: `{dropdir}`, `{door32}`

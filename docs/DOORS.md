@@ -115,6 +115,11 @@ local screen isn't sent to the caller; only what it writes to COM1 is.
 
 ### Things to know
 
+- **Wide windows**: classic doors draw for 80 columns and rely on the
+  terminal wrapping there. OpenBBS wraps CP437 door output at column 80 so
+  the art lines up in any window size. Set `columns` in doors.toml to
+  change the width, or `columns = 0` to turn this off.
+
 - **Give DOSEMU2 KVM access** with `sudo usermod -aG kvm openbbs`, then
   restart the service. Without it DOSEMU2 emulates the CPU, which is much
   slower.

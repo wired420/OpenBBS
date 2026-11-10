@@ -7,6 +7,7 @@ use std::process::Stdio;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
+use openbbs_core::colwrap::ColumnWrap;
 use openbbs_core::doors::{self, Door, DropInfo, Encoding};
 use openbbs_core::text::escape_pipes;
 use openbbs_core::{VERSION, cp437};
@@ -167,6 +168,7 @@ impl Session {
         }
         let mut buf = vec![0u8; 8192];
         let mut utf8_carry: Vec<u8> = Vec::new();
+        let mut wrap = door.wrap_columns().map(ColumnWrap::new);
         let outcome: Result<(), Hangup> = loop {
             tokio::select! {
                 read = stdout.read(&mut buf) => {
@@ -187,6 +189,10 @@ impl Session {
                             utf8_carry.drain(..valid);
                             text
                         }
+                    };
+                    let text = match wrap.as_mut() {
+                        Some(wrap) => wrap.process(&text),
+                        None => text,
                     };
                     if let Err(e) = term.write_raw(text.into_bytes()) {
                         break Err(e);
