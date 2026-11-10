@@ -115,6 +115,16 @@ local screen isn't sent to the caller; only what it writes to COM1 is.
 
 ### Things to know
 
+- **Paths in a door's own config must be DOS paths.** Inside DOSEMU2 the
+  door's folder is a DOS drive (usually `G:`), so a door's setup program
+  needs `G:\NODE1\DOOR.SYS`, not `/opt/openbbs/...`.
+- **Check that the door's installer finished.** Some installers unzip
+  their screens with PKUNZIP and quietly skip it under DOSEMU2. A door with
+  no screens shows a blank screen. Look for leftover `.ZIP` files in the
+  door's subfolders and unzip them on Linux with `unzip`.
+- **Exit codes:** some doors (Exitilus, for one) always exit with code 1,
+  so the log says "door finished with an error" after a normal game.
+
 - **Wide windows**: classic doors draw for 80 columns and rely on the
   terminal wrapping there. OpenBBS wraps CP437 door output at column 80 so
   the art lines up in any window size. Set `columns` in doors.toml to
